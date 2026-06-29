@@ -140,7 +140,7 @@ async function getAllPeriods() {
   const snap = await quinzainesRef().get();
   return snap.docs
     .map(d => ({ key: d.id, ...d.data() }))
-    .sort((a, b) => b.year - a.year || b.month - a.month || a.quinzaine.localeCompare(b.quinzaine));
+    .sort((a, b) => b.year - a.year || b.month - a.month || b.quinzaine.localeCompare(a.quinzaine));
 }
 
 async function deletePeriod(key) {
@@ -329,4 +329,55 @@ async function getUpcomingDue(hours) {
     const ts = new Date(f.echeance).getTime();
     return ts >= now && ts <= limit;
   });
+}
+
+// ── Catalogue Fournisseurs ───────────────────────────────────────────
+
+function catalogueFrsRef(pharmacieId) {
+  const pid = pharmacieId || _currentPharmacieId;
+  return getDB().collection(COLLECTIONS.PHARMACIES).doc(pid).collection('catalogue_frs');
+}
+
+async function getAllCatalogueFrs() {
+  const snap = await catalogueFrsRef().get();
+  const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  list.sort((a, b) => (a.nom||'').localeCompare(b.nom||''));
+  return list;
+}
+
+async function saveCatalogueFrs(data) {
+  const ref = data.id ? catalogueFrsRef().doc(data.id) : catalogueFrsRef().doc();
+  const { id, ...rest } = data;
+  await ref.set(rest, { merge: true });
+  return ref.id;
+}
+
+async function deleteCatalogueFrs(id) {
+  await catalogueFrsRef().doc(id).delete();
+}
+
+// ── Journal de bord ──────────────────────────────────────────────────
+
+function journalRef(pharmacieId) {
+  const pid = pharmacieId || _currentPharmacieId;
+  return getDB().collection(COLLECTIONS.PHARMACIES).doc(pid).collection('journal');
+}
+
+async function logAction(action, details, userName) {
+  try {
+    if (!_currentPharmacieId) return;
+    await journalRef().doc().set({
+      action,
+      details: details || '',
+      userName: userName || '',
+      date: new Date().toLocaleDateString('fr-FR'),
+      heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e) { /* silencieux */ }
+}
+
+async function getJournalEntries(limitN) {
+  const snap = await journalRef().orderBy('timestamp', 'desc').limit(limitN || 300).get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }

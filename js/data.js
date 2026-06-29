@@ -131,8 +131,8 @@ async function savePeriod(period) {
   return { key, ...period };
 }
 
-async function getPeriod(year, month, quinzaine) {
-  const doc = await quinzainesRef().doc(periodKey(year, month, quinzaine)).get();
+async function getPeriod(year, month, quinzaine, bis) {
+  const doc = await quinzainesRef().doc(periodKey(year, month, quinzaine, bis)).get();
   return doc.exists ? { key: doc.id, ...doc.data() } : null;
 }
 

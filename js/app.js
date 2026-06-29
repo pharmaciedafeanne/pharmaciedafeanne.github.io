@@ -1383,6 +1383,54 @@ async function doRouvrirQuinzaine(key) {
 //  SUIVI INAM / AMU
 // ══════════════════════════════════════════════════════════════
 
+const MOIS_INAM = ['JANVIER','FÉVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOÛT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DÉCEMBRE'];
+
+function buildInamQuinzaine() {
+  const q    = document.getElementById('inam-entry-qnum').value;
+  const mois = document.getElementById('inam-entry-mois').value;
+  const an   = document.getElementById('inam-entry-annee').value;
+  const bis  = document.getElementById('inam-entry-bis').checked;
+  return `${q} ${mois} ${an}${bis ? ' BIS' : ''}`;
+}
+
+function updateInamPreview() {
+  const el = document.getElementById('inam-quinzaine-preview');
+  if (el) el.textContent = buildInamQuinzaine();
+}
+
+function initInamQuinzaineSelectors(quinzaine) {
+  // Populate years
+  const selAn = document.getElementById('inam-entry-annee');
+  const curY = new Date().getFullYear();
+  selAn.innerHTML = '';
+  for (let y = 2024; y <= curY + 2; y++) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    selAn.appendChild(o);
+  }
+  // Wire preview update
+  ['inam-entry-qnum','inam-entry-mois','inam-entry-annee','inam-entry-bis'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', updateInamPreview);
+  });
+  // Parse existing quinzaine string if editing
+  if (quinzaine) {
+    const parts = quinzaine.split(' ');
+    const isBis = parts[parts.length-1] === 'BIS';
+    const clean = isBis ? parts.slice(0,-1) : parts;
+    if (clean[0]) document.getElementById('inam-entry-qnum').value = clean[0];
+    if (clean[1]) document.getElementById('inam-entry-mois').value = clean[1];
+    if (clean[2]) document.getElementById('inam-entry-annee').value = clean[2];
+    document.getElementById('inam-entry-bis').checked = isBis;
+  } else {
+    // Defaults: current month/year
+    document.getElementById('inam-entry-mois').value = MOIS_INAM[new Date().getMonth()];
+    document.getElementById('inam-entry-annee').value = curY;
+    document.getElementById('inam-entry-bis').checked = false;
+  }
+  updateInamPreview();
+}
+
 async function renderInamAmu() {
   const tableBody = document.getElementById('inam-tbody');
   if (tableBody) tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px">Chargement…</td></tr>`;
@@ -1392,12 +1440,14 @@ async function renderInamAmu() {
     const totFacture = list.reduce((s,r) => s + (r.montantFacture||0), 0);
     const totPaye    = list.reduce((s,r) => s + (r.montantPaye||0), 0);
     const totReste   = totFacture - totPaye;
+    const nbEncours  = list.filter(r => r.statut === 'en cours de paiement').length;
 
     const sumRow = document.getElementById('inam-summary');
     if (sumRow) sumRow.innerHTML = `
       <div class="inam-sum-card inam-c"><div class="isc-val">${fmtA(totFacture)}</div><div class="isc-label">Total facturé</div></div>
       <div class="inam-sum-card inam-c"><div class="isc-val">${fmtA(totPaye)}</div><div class="isc-label">Total payé</div></div>
-      <div class="inam-sum-card amu-c"><div class="isc-val">${fmtA(totReste)}</div><div class="isc-label">Reste à percevoir</div></div>`;
+      <div class="inam-sum-card amu-c"><div class="isc-val">${fmtA(totReste)}</div><div class="isc-label">Reste à percevoir</div></div>
+      ${nbEncours ? `<div class="inam-sum-card" style="border-color:var(--warning)"><div class="isc-val" style="color:var(--warning)">${nbEncours}</div><div class="isc-label">En cours de paiement</div></div>` : ''}`;
 
     if (!tableBody) return;
     if (!list.length) {
@@ -1408,17 +1458,18 @@ async function renderInamAmu() {
     }
     list.sort((a, b) => (b.date||'').localeCompare(a.date||''));
     tableBody.innerHTML = list.map(r => {
-      const reste = (r.montantFacture||0) - (r.montantPaye||0);
-      const statut = r.statut || (reste <= 0 ? 'payé' : (r.montantPaye||0) > 0 ? 'partiel' : 'non payé');
-      const cls = statut === 'payé' ? 'statut-paye' : statut === 'partiel' ? 'statut-partiel' : 'statut-nonpaye';
+      const reste  = (r.montantFacture||0) - (r.montantPaye||0);
+      const statut = r.statut || (reste <= 0 ? 'payé' : (r.montantPaye||0) > 0 ? 'en cours de paiement' : 'non payé');
+      const cls    = statut === 'payé' ? 'statut-paye' : statut === 'en cours de paiement' ? 'statut-partiel' : 'statut-nonpaye';
+      const label  = statut === 'payé' ? 'Payé' : statut === 'en cours de paiement' ? 'En cours' : 'Non payé';
       return `<tr>
         <td>${esc(r.date||'')}</td>
-        <td>${esc(r.entite||'')}</td>
+        <td><span class="badge" style="background:${r.entite==='INAM'?'rgba(41,128,185,.12)':'rgba(39,174,96,.12)'};color:${r.entite==='INAM'?'var(--info,#2980b9)':'var(--success)'}">${esc(r.entite||'')}</span></td>
         <td>${esc(r.quinzaine||'')}</td>
         <td class="amount">${fmtA(r.montantFacture)}</td>
         <td class="amount">${fmtA(r.montantPaye)}</td>
-        <td class="amount">${fmtA(reste)}</td>
-        <td><span class="${cls}">${statut}</span></td>
+        <td class="amount ${reste > 0 ? 'danger' : ''}">${fmtA(reste)}</td>
+        <td><span class="${cls}">${label}</span></td>
         <td>${esc(r.dateVirement||'')}</td>
         <td>
           <button class="btn btn-outline btn-sm" onclick="openEditInamEntry('${r.id}')">✏️</button>
@@ -1433,11 +1484,12 @@ function openNewInamEntry() {
   document.getElementById('inam-entry-id').value = '';
   document.getElementById('inam-entry-date').value = new Date().toISOString().slice(0,10);
   document.getElementById('inam-entry-entite').value = 'INAM';
-  document.getElementById('inam-entry-quinzaine').value = '';
   document.getElementById('inam-entry-facture').value = '';
   document.getElementById('inam-entry-paye').value = '';
   document.getElementById('inam-entry-statut').value = 'non payé';
   document.getElementById('inam-entry-virement').value = '';
+  document.getElementById('inam-entry-title').textContent = '🏥 Nouvelle entrée INAM / AMU';
+  initInamQuinzaineSelectors(null);
   openModal('modal-inam-entry');
 }
 
@@ -1446,14 +1498,15 @@ async function openEditInamEntry(id) {
     const list = await getAllSuiviInamAmu();
     const r = list.find(x => x.id === id);
     if (!r) return toast('Enregistrement introuvable','error');
-    document.getElementById('inam-entry-id').value = id;
-    document.getElementById('inam-entry-date').value = r.date||'';
+    document.getElementById('inam-entry-id').value    = id;
+    document.getElementById('inam-entry-date').value  = r.date||'';
     document.getElementById('inam-entry-entite').value = r.entite||'INAM';
-    document.getElementById('inam-entry-quinzaine').value = r.quinzaine||'';
     document.getElementById('inam-entry-facture').value = r.montantFacture||'';
-    document.getElementById('inam-entry-paye').value = r.montantPaye||'';
+    document.getElementById('inam-entry-paye').value   = r.montantPaye||'';
     document.getElementById('inam-entry-statut').value = r.statut||'non payé';
     document.getElementById('inam-entry-virement').value = r.dateVirement||'';
+    document.getElementById('inam-entry-title').textContent = '✏️ Modifier entrée INAM / AMU';
+    initInamQuinzaineSelectors(r.quinzaine||'');
     openModal('modal-inam-entry');
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
@@ -1462,12 +1515,12 @@ async function saveInamEntry() {
   const id             = document.getElementById('inam-entry-id').value;
   const date           = document.getElementById('inam-entry-date').value;
   const entite         = document.getElementById('inam-entry-entite').value;
-  const quinzaine      = document.getElementById('inam-entry-quinzaine').value.trim();
+  const quinzaine      = buildInamQuinzaine();
   const montantFacture = parseFloat(document.getElementById('inam-entry-facture').value)||0;
   const montantPaye    = parseFloat(document.getElementById('inam-entry-paye').value)||0;
   const statut         = document.getElementById('inam-entry-statut').value;
   const dateVirement   = document.getElementById('inam-entry-virement').value;
-  if (!date || !entite || !quinzaine) return toast('Veuillez remplir Date, Entité et Quinzaine','error');
+  if (!date || !entite) return toast('Veuillez remplir la Date et l\'Entité','error');
   try {
     const data = { date, entite, quinzaine, montantFacture, montantPaye, statut, dateVirement };
     if (id) { await updateSuiviInamAmu(id, data); } else { await saveSuiviInamAmu(data); }
@@ -1493,108 +1546,134 @@ async function doDeleteInamEntry(id) {
 async function renderCaisse() {
   const tableBody = document.getElementById('caisse-tbody');
   if (!tableBody) return;
-  tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px">Chargement…</td></tr>`;
+  tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px">Chargement…</td></tr>`;
   try {
     const ops = await getAllCaisseOps();
-    // Calcul solde courant
+    const canEdit = currentUser && (currentUser.role === 'superadmin' || currentUser.role === 'titulaire');
+
+    // Solde global
     let solde = 0;
     ops.slice().reverse().forEach(op => {
-      if (op.type === 'recharge') solde += (op.montant||0);
-      else solde -= (op.montant||0);
+      solde += op.type === 'recharge' ? (op.montant||0) : -(op.montant||0);
     });
     const soldeEl = document.getElementById('caisse-solde');
-    if (soldeEl) soldeEl.textContent = fmtA(solde);
+    if (soldeEl) {
+      soldeEl.textContent = fmtA(solde);
+      soldeEl.style.color = solde >= 0 ? 'var(--success)' : 'var(--danger)';
+    }
     const lastRecharge = ops.find(o => o.type === 'recharge');
     const lrEl = document.getElementById('caisse-last-recharge');
     if (lrEl) lrEl.textContent = lastRecharge ? (lastRecharge.date || '—') : '—';
 
-    // Alertes prospectives (dans les 72h)
-    const now = Date.now();
-    const limit72 = now + 72 * 3600 * 1000;
-    const prospects = ops.filter(op => op.prospectif && op.dateEcheance && new Date(op.dateEcheance).getTime() <= limit72 && new Date(op.dateEcheance).getTime() >= now);
-    const notifBar = document.getElementById('caisse-notif-bar');
-    if (notifBar) {
-      if (prospects.length) {
-        notifBar.classList.remove('hidden');
-        notifBar.textContent = `⚠️ ${prospects.length} dépense(s) prospective(s) à régler dans les 72h.`;
-      } else notifBar.classList.add('hidden');
-    }
-
     if (!ops.length) {
-      tableBody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+      tableBody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
         <div class="empty-icon">💰</div><h3>Caisse vide</h3>
         <p>Rechargez la caisse ou enregistrez une dépense.</p></div></td></tr>`;
       return;
     }
-    // Calcul solde progressif
+    // Solde progressif (tri chronologique)
     let soldeRun = 0;
-    const opsAsc = ops.slice().reverse();
     const soldesMap = {};
-    opsAsc.forEach(op => {
-      if (op.type === 'recharge') soldeRun += (op.montant||0);
-      else soldeRun -= (op.montant||0);
+    ops.slice().reverse().forEach(op => {
+      soldeRun += op.type === 'recharge' ? (op.montant||0) : -(op.montant||0);
       soldesMap[op.id] = soldeRun;
     });
 
     tableBody.innerHTML = ops.map(op => {
-      const isFutur = op.prospectif && op.dateEcheance && new Date(op.dateEcheance).getTime() > Date.now();
-      const rowClass = op.type === 'recharge' ? 'caisse-recharge' : (isFutur ? 'caisse-prospect caisse-depense' : 'caisse-depense');
+      const isRecharge = op.type === 'recharge';
+      const rowClass   = isRecharge ? 'caisse-recharge' : 'caisse-depense';
+      const ref        = isRecharge && op.typeRecharge === 'mobilemoney' ? esc(op.refTransaction||'—') : (isRecharge ? 'Espèce' : '—');
+      const actions    = isRecharge && canEdit
+        ? `<button class="btn btn-outline btn-sm" onclick="openEditRecharge('${op.id}')">✏️</button>
+           <button class="btn btn-danger btn-sm" onclick="doDeleteCaisseOp('${op.id}')">🗑️</button>`
+        : (!isRecharge ? `<button class="btn btn-danger btn-sm" onclick="doDeleteCaisseOp('${op.id}')">🗑️</button>` : '');
       return `<tr class="${rowClass}">
         <td>${esc(op.date||'—')}</td>
-        <td><span class="badge" style="background:${op.type==='recharge'?'rgba(39,174,96,.15)':'rgba(231,76,60,.1)'};color:${op.type==='recharge'?'var(--success)':'var(--danger)'}">${op.type==='recharge'?'Recharge':'Dépense'}</span>${isFutur?'<span style="margin-left:4px;font-size:10px;color:var(--warning)">⏳</span>':''}</td>
-        <td>${esc(op.fournisseur||'—')}</td>
-        <td>${esc(op.libelle||'—')}</td>
-        <td class="amount ${op.type==='recharge'?'dafeanne':''}"><strong>${op.type==='recharge'?'+':'-'} ${fmtA(op.montant)}</strong></td>
+        <td><span class="badge" style="background:${isRecharge?'rgba(39,174,96,.15)':'rgba(231,76,60,.1)'};color:${isRecharge?'var(--success)':'var(--danger)'}">${isRecharge?'Recharge':'Dépense'}</span></td>
+        <td>${esc(op.libelle || op.designation || (isRecharge ? 'Recharge caisse' : '—'))}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${ref}</td>
+        <td class="amount ${isRecharge?'':'danger'}"><strong>${isRecharge?'+':'-'} ${fmtA(op.montant)}</strong></td>
         <td class="amount">${fmtA(soldesMap[op.id]||0)}</td>
-        <td>${esc(op.note||'—')}</td>
-        <td><button class="btn btn-danger btn-sm btn-icon" onclick="doDeleteCaisseOp('${op.id}')">🗑️</button></td>
+        <td style="font-size:12px">${esc(op.note||'')}</td>
+        <td style="display:flex;gap:4px">${actions}</td>
       </tr>`;
     }).join('');
   } catch(e) { console.error(e); toast('Erreur chargement caisse','error'); }
 }
 
+function onRechargeTypeChange() {
+  const type = document.getElementById('recharge-type').value;
+  const row  = document.getElementById('recharge-ref-row');
+  if (row) row.classList.toggle('hidden', type !== 'mobilemoney');
+}
+
 function openRecharge() {
-  document.getElementById('modal-caisse-title').textContent = '💚 Recharge Caisse';
-  document.getElementById('caisse-op-type').value = 'recharge';
-  document.getElementById('caisse-date').value = new Date().toISOString().slice(0,10);
-  document.getElementById('caisse-fournisseur').value = '';
-  document.getElementById('caisse-designation').value = '';
-  document.getElementById('caisse-montant-facture').value = 0;
-  document.getElementById('caisse-montant-paye').value = 0;
-  document.getElementById('caisse-obs').value = '';
-  document.getElementById('caisse-echeance-row').classList.add('hidden');
-  document.getElementById('caisse-echeance').value = '';
-  openModal('modal-caisse');
+  document.getElementById('recharge-id').value     = '';
+  document.getElementById('recharge-date').value   = new Date().toISOString().slice(0,10);
+  document.getElementById('recharge-montant').value = '';
+  document.getElementById('recharge-type').value   = 'espece';
+  document.getElementById('recharge-ref').value    = '';
+  document.getElementById('recharge-obs').value    = '';
+  document.getElementById('recharge-ref-row').classList.add('hidden');
+  openModal('modal-recharge');
+}
+
+async function openEditRecharge(id) {
+  const ops = await getAllCaisseOps();
+  const op  = ops.find(x => x.id === id);
+  if (!op) return;
+  document.getElementById('recharge-id').value      = id;
+  document.getElementById('recharge-date').value    = op.date||'';
+  document.getElementById('recharge-montant').value = op.montant||'';
+  document.getElementById('recharge-type').value    = op.typeRecharge||'espece';
+  document.getElementById('recharge-ref').value     = op.refTransaction||'';
+  document.getElementById('recharge-obs').value     = op.note||'';
+  document.getElementById('recharge-ref-row').classList.toggle('hidden', (op.typeRecharge||'espece') !== 'mobilemoney');
+  openModal('modal-recharge');
+}
+
+async function saveRecharge() {
+  const id          = document.getElementById('recharge-id').value;
+  const date        = document.getElementById('recharge-date').value;
+  const montant     = parseFloat(document.getElementById('recharge-montant').value)||0;
+  const typeRecharge= document.getElementById('recharge-type').value;
+  const refTransaction = document.getElementById('recharge-ref').value.trim();
+  const note        = document.getElementById('recharge-obs').value.trim();
+  if (!date || !montant) return toast('Date et montant obligatoires','error');
+  if (typeRecharge === 'mobilemoney' && !refTransaction) return toast('Référence transaction obligatoire pour Mobile Money','error');
+  const data = { type: 'recharge', date, montant, typeRecharge, refTransaction, note,
+                 libelle: typeRecharge === 'mobilemoney' ? `Recharge MM — ${refTransaction}` : 'Recharge caisse (espèce)' };
+  try {
+    if (id) { await saveCaisseOp({ ...data, id }); }
+    else    { await saveCaisseOp(data); }
+    closeModal();
+    toast(id ? 'Recharge modifiée ✓' : 'Recharge enregistrée ✓','success');
+    renderCaisse();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
 
 function openDepense() {
-  document.getElementById('modal-caisse-title').textContent = '🔴 Nouvelle Dépense';
-  document.getElementById('caisse-op-type').value = 'depense';
-  document.getElementById('caisse-date').value = new Date().toISOString().slice(0,10);
-  document.getElementById('caisse-fournisseur').value = '';
-  document.getElementById('caisse-designation').value = '';
-  document.getElementById('caisse-montant-facture').value = 0;
-  document.getElementById('caisse-montant-paye').value = 0;
-  document.getElementById('caisse-obs').value = '';
-  document.getElementById('caisse-echeance-row').classList.remove('hidden');
-  document.getElementById('caisse-echeance').value = '';
-  openModal('modal-caisse');
+  document.getElementById('depense-id').value          = '';
+  document.getElementById('depense-date').value        = new Date().toISOString().slice(0,10);
+  document.getElementById('depense-montant').value     = '';
+  document.getElementById('depense-fournisseur').value = '';
+  document.getElementById('depense-designation').value = '';
+  document.getElementById('depense-obs').value         = '';
+  openModal('modal-depense');
 }
 
-async function saveCaisseOpForm() {
-  const type       = document.getElementById('caisse-op-type').value || 'depense';
-  const fournisseur= document.getElementById('caisse-fournisseur').value.trim();
-  const libelle    = document.getElementById('caisse-designation').value.trim();
-  const montant    = parseFloat(document.getElementById('caisse-montant-paye').value)||0;
-  const note       = document.getElementById('caisse-obs').value.trim();
-  const echeance   = document.getElementById('caisse-echeance').value;
-  const date       = document.getElementById('caisse-date').value || new Date().toISOString().slice(0,10);
-  const prospectif = !!(echeance && new Date(echeance).getTime() > Date.now());
-  if (!libelle || !montant) { toast('Remplissez la désignation et le montant payé','error'); return; }
+async function saveDepense() {
+  const id          = document.getElementById('depense-id').value;
+  const date        = document.getElementById('depense-date').value;
+  const montant     = parseFloat(document.getElementById('depense-montant').value)||0;
+  const fournisseur = document.getElementById('depense-fournisseur').value.trim();
+  const libelle     = document.getElementById('depense-designation').value.trim();
+  const note        = document.getElementById('depense-obs').value.trim();
+  if (!date || !montant || !libelle) return toast('Date, montant et désignation obligatoires','error');
   try {
-    await saveCaisseOp({ type, fournisseur, libelle, montant, note, date, prospectif, dateEcheance: echeance || null });
+    await saveCaisseOp({ type: 'depense', date, montant, fournisseur, libelle, note });
     closeModal();
-    toast('Opération enregistrée ✓','success');
+    toast('Dépense enregistrée ✓','success');
     renderCaisse();
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }

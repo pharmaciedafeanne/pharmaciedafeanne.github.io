@@ -477,7 +477,7 @@
         <div class="card">
           <div class="table-wrapper">
             <table>
-              <thead><tr><th>Date</th><th>Type</th><th>Fournisseur</th><th>Désignation</th><th>Montant</th><th>Solde après</th><th>Observations</th><th></th></tr></thead>
+              <thead><tr><th>Date</th><th>Type</th><th>Désignation / Source</th><th>Réf. transaction</th><th>Montant</th><th>Solde après</th><th>Obs.</th><th></th></tr></thead>
               <tbody id="caisse-tbody"></tbody>
             </table>
           </div>
@@ -597,7 +597,6 @@
     </div>
   </div>
 
-  <!-- Modal Paiement INAM/AMU -->
   <!-- Modal Entrée INAM/AMU -->
   <div class="modal modal-sm hidden" id="modal-inam-entry">
     <div class="modal-header">
@@ -622,7 +621,25 @@
       <div class="form-row">
         <div class="field">
           <label>Quinzaine *</label>
-          <input type="text" id="inam-entry-quinzaine" placeholder="Ex: Q1 JUIN 2025" required>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select id="inam-entry-qnum" style="width:70px">
+              <option value="Q1">Q1</option>
+              <option value="Q2">Q2</option>
+            </select>
+            <select id="inam-entry-mois" style="flex:1;min-width:110px">
+              <option>JANVIER</option><option>FÉVRIER</option><option>MARS</option>
+              <option>AVRIL</option><option>MAI</option><option>JUIN</option>
+              <option>JUILLET</option><option>AOÛT</option><option>SEPTEMBRE</option>
+              <option>OCTOBRE</option><option>NOVEMBRE</option><option>DÉCEMBRE</option>
+            </select>
+            <select id="inam-entry-annee" style="width:80px"></select>
+            <label style="display:flex;align-items:center;gap:4px;font-size:13px;white-space:nowrap;cursor:pointer">
+              <input type="checkbox" id="inam-entry-bis"> BIS
+            </label>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
+            Aperçu : <strong id="inam-quinzaine-preview">—</strong>
+          </div>
         </div>
       </div>
       <div class="form-row cols-2">
@@ -640,7 +657,7 @@
           <label>Statut</label>
           <select id="inam-entry-statut">
             <option value="non payé">Non payé</option>
-            <option value="partiel">Partiel</option>
+            <option value="en cours de paiement">En cours de paiement</option>
             <option value="payé">Payé</option>
           </select>
         </div>
@@ -656,36 +673,65 @@
     </div>
   </div>
 
-  <!-- Modal Recharge / Dépense Caisse -->
-  <div class="modal modal-sm hidden" id="modal-caisse">
+  <!-- Modal Recharge Caisse -->
+  <div class="modal modal-sm hidden" id="modal-recharge">
     <div class="modal-header">
-      <h3 id="modal-caisse-title">💰 Opération Caisse</h3>
+      <h3>➕ Recharge Caisse</h3>
       <button class="btn-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
-      <input type="hidden" id="caisse-op-id">
-      <input type="hidden" id="caisse-op-type">
+      <input type="hidden" id="recharge-id">
       <div class="form-row cols-2">
-        <div class="field"><label>Date *</label><input type="date" id="caisse-date" required></div>
-        <div class="field" id="caisse-echeance-row"><label>Échéance (si prospectif)</label><input type="date" id="caisse-echeance"></div>
+        <div class="field"><label>Date *</label><input type="date" id="recharge-date" required></div>
+        <div class="field"><label>Montant (F) *</label><input type="number" id="recharge-montant" min="0" value="0" required></div>
       </div>
       <div class="form-row">
-        <div class="field"><label>Fournisseur / Source</label><input type="text" id="caisse-fournisseur" placeholder="Nom…"></div>
+        <div class="field">
+          <label>Type de recharge *</label>
+          <select id="recharge-type" onchange="onRechargeTypeChange()">
+            <option value="espece">Espèce</option>
+            <option value="mobilemoney">Mobile Money</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row hidden" id="recharge-ref-row">
+        <div class="field"><label>Référence transaction *</label><input type="text" id="recharge-ref" placeholder="Ex: TG-12345678"></div>
       </div>
       <div class="form-row">
-        <div class="field"><label>Désignation *</label><input type="text" id="caisse-designation" required placeholder="Description de l'opération…"></div>
-      </div>
-      <div class="form-row cols-2">
-        <div class="field"><label>Montant facturé (F)</label><input type="number" id="caisse-montant-facture" min="0" value="0"></div>
-        <div class="field"><label>Montant payé (F) *</label><input type="number" id="caisse-montant-paye" min="0" value="0" required></div>
-      </div>
-      <div class="form-row">
-        <div class="field"><label>Observations</label><textarea id="caisse-obs" rows="2"></textarea></div>
+        <div class="field"><label>Observations</label><textarea id="recharge-obs" rows="2" placeholder="Note optionnelle…"></textarea></div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
-      <button class="btn btn-primary" onclick="saveCaisseOpForm()">💾 Enregistrer</button>
+      <button class="btn btn-success" onclick="saveRecharge()">💾 Enregistrer</button>
+    </div>
+  </div>
+
+  <!-- Modal Dépense Caisse -->
+  <div class="modal modal-sm hidden" id="modal-depense">
+    <div class="modal-header">
+      <h3>💸 Nouvelle Dépense</h3>
+      <button class="btn-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="depense-id">
+      <div class="form-row cols-2">
+        <div class="field"><label>Date *</label><input type="date" id="depense-date" required></div>
+        <div class="field"><label>Montant (F) *</label><input type="number" id="depense-montant" min="0" value="0" required></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Fournisseur / Bénéficiaire</label><input type="text" id="depense-fournisseur" placeholder="Nom…"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Désignation *</label><input type="text" id="depense-designation" required placeholder="Description de la dépense…"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Observations</label><textarea id="depense-obs" rows="2"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveDepense()">💾 Enregistrer</button>
     </div>
   </div>
 

@@ -1224,22 +1224,6 @@ async function doCloturerQuinzaine(key) {
   if (!confirm('Clôturer cette quinzaine ? La saisie sera verrouillée.')) return;
   try {
     await getQuinzaineDocRef(key).update({ cloturee: true, clotureeAt: firebase.firestore.FieldValue.serverTimestamp() });
-    // Alimenter automatiquement le suivi INAM/AMU
-    const snap = await getQuinzaineDocRef(key).get();
-    if (snap.exists) {
-      const p = snap.data();
-      const T = p.totaux || {};
-      await saveSuiviInamAmu({
-        periodKey: key,
-        label: periodLbl(p),
-        inamTotal:    (T.inam   || 0),
-        amuTotal:     (T.amu    || 0),
-        inamPaye:     0,
-        amuPaye:      0,
-        statut:       'non payé',
-        clotureeAt:   new Date().toISOString()
-      });
-    }
     toast('Quinzaine clôturée ✓', 'success');
     renderDetail(key);
   } catch(e) { toast('Erreur: '+e.message, 'error'); }
@@ -1259,74 +1243,104 @@ async function doRouvrirQuinzaine(key) {
 // ══════════════════════════════════════════════════════════════
 
 async function renderInamAmu() {
-  const container = document.getElementById('view-inam-amu');
-  if (!container) return;
   const tableBody = document.getElementById('inam-tbody');
-  if (tableBody) tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px">Chargement…</td></tr>`;
+  if (tableBody) tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px">Chargement…</td></tr>`;
   try {
     const list = await getAllSuiviInamAmu();
-    const totInam  = list.reduce((s,r) => s + (r.inamTotal||0), 0);
-    const totAmu   = list.reduce((s,r) => s + (r.amuTotal||0), 0);
-    const totPayeI = list.reduce((s,r) => s + (r.inamPaye||0), 0);
-    const totPayeA = list.reduce((s,r) => s + (r.amuPaye||0), 0);
 
-    // Cartes résumé
+    const totFacture = list.reduce((s,r) => s + (r.montantFacture||0), 0);
+    const totPaye    = list.reduce((s,r) => s + (r.montantPaye||0), 0);
+    const totReste   = totFacture - totPaye;
+
     const sumRow = document.getElementById('inam-summary');
     if (sumRow) sumRow.innerHTML = `
-      <div class="inam-sum-card inam-c"><div class="isc-val">${fmtA(totInam)}</div><div class="isc-label">Total INAM facturé</div></div>
-      <div class="inam-sum-card inam-c"><div class="isc-val">${fmtA(totPayeI)}</div><div class="isc-label">INAM reçu</div></div>
-      <div class="inam-sum-card amu-c"><div class="isc-val">${fmtA(totAmu)}</div><div class="isc-label">Total AMU facturé</div></div>
-      <div class="inam-sum-card amu-c"><div class="isc-val">${fmtA(totPayeA)}</div><div class="isc-label">AMU reçu</div></div>`;
+      <div class="inam-sum-card inam-c"><div class="isc-val">${fmtA(totFacture)}</div><div class="isc-label">Total facturé</div></div>
+      <div class="inam-sum-card inam-c"><div class="isc-val">${fmtA(totPaye)}</div><div class="isc-label">Total payé</div></div>
+      <div class="inam-sum-card amu-c"><div class="isc-val">${fmtA(totReste)}</div><div class="isc-label">Reste à percevoir</div></div>`;
 
     if (!tableBody) return;
     if (!list.length) {
-      tableBody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+      tableBody.innerHTML = `<tr><td colspan="9"><div class="empty-state">
         <div class="empty-icon">🏥</div><h3>Aucun enregistrement</h3>
-        <p>Les paiements apparaissent automatiquement lorsqu'une quinzaine est clôturée.</p></div></td></tr>`;
+        <p>Cliquez sur "Nouvelle entrée" pour ajouter un paiement INAM ou AMU.</p></div></td></tr>`;
       return;
     }
+    list.sort((a, b) => (b.date||'').localeCompare(a.date||''));
     tableBody.innerHTML = list.map(r => {
-      const restI = (r.inamTotal||0) - (r.inamPaye||0);
-      const restA = (r.amuTotal||0)  - (r.amuPaye||0);
-      const statut = (restI + restA === 0) ? 'payé' : ((r.inamPaye||0)+(r.amuPaye||0) > 0) ? 'partiel' : 'non payé';
+      const reste = (r.montantFacture||0) - (r.montantPaye||0);
+      const statut = r.statut || (reste <= 0 ? 'payé' : (r.montantPaye||0) > 0 ? 'partiel' : 'non payé');
       const cls = statut === 'payé' ? 'statut-paye' : statut === 'partiel' ? 'statut-partiel' : 'statut-nonpaye';
       return `<tr>
-        <td>${esc(r.label||r.periodKey)}</td>
-        <td class="amount">${fmtA(r.inamTotal)}</td>
-        <td class="amount">${fmtA(r.amuTotal)}</td>
-        <td class="amount">${fmtA(r.inamPaye)}</td>
-        <td class="amount">${fmtA(r.amuPaye)}</td>
-        <td class="amount">${fmtA(restI+restA)}</td>
+        <td>${esc(r.date||'')}</td>
+        <td>${esc(r.entite||'')}</td>
+        <td>${esc(r.quinzaine||'')}</td>
+        <td class="amount">${fmtA(r.montantFacture)}</td>
+        <td class="amount">${fmtA(r.montantPaye)}</td>
+        <td class="amount">${fmtA(reste)}</td>
         <td><span class="${cls}">${statut}</span></td>
-        <td><button class="btn btn-outline btn-sm" onclick="openInamPay('${r.id}')">💳 Paiement</button></td>
+        <td>${esc(r.dateVirement||'')}</td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="openEditInamEntry('${r.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="doDeleteInamEntry('${r.id}')">🗑️</button>
+        </td>
       </tr>`;
     }).join('');
   } catch(e) { console.error(e); toast('Erreur chargement INAM/AMU','error'); }
 }
 
-function openInamPay(id) {
-  document.getElementById('inam-pay-id').value = id;
-  document.getElementById('inam-pay-inam').value = 0;
-  document.getElementById('inam-pay-amu').value  = 0;
-  document.getElementById('inam-pay-date').value = new Date().toISOString().slice(0,10);
-  openModal('modal-inam-pay');
+function openNewInamEntry() {
+  document.getElementById('inam-entry-id').value = '';
+  document.getElementById('inam-entry-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('inam-entry-entite').value = 'INAM';
+  document.getElementById('inam-entry-quinzaine').value = '';
+  document.getElementById('inam-entry-facture').value = '';
+  document.getElementById('inam-entry-paye').value = '';
+  document.getElementById('inam-entry-statut').value = 'non payé';
+  document.getElementById('inam-entry-virement').value = '';
+  openModal('modal-inam-entry');
 }
 
-async function saveInamPay() {
-  const id   = document.getElementById('inam-pay-id').value;
-  const inam = parseFloat(document.getElementById('inam-pay-inam').value)||0;
-  const amu  = parseFloat(document.getElementById('inam-pay-amu').value) ||0;
+async function openEditInamEntry(id) {
   try {
     const list = await getAllSuiviInamAmu();
-    const rec  = list.find(r => r.id === id);
-    if (!rec) throw new Error('Enregistrement introuvable');
-    await updateSuiviInamAmu(id, {
-      inamPaye: (rec.inamPaye||0) + inam,
-      amuPaye:  (rec.amuPaye||0)  + amu,
-      statut:   ((rec.inamPaye||0)+inam+(rec.amuPaye||0)+amu) >= ((rec.inamTotal||0)+(rec.amuTotal||0)) ? 'payé' : 'partiel'
-    });
+    const r = list.find(x => x.id === id);
+    if (!r) return toast('Enregistrement introuvable','error');
+    document.getElementById('inam-entry-id').value = id;
+    document.getElementById('inam-entry-date').value = r.date||'';
+    document.getElementById('inam-entry-entite').value = r.entite||'INAM';
+    document.getElementById('inam-entry-quinzaine').value = r.quinzaine||'';
+    document.getElementById('inam-entry-facture').value = r.montantFacture||'';
+    document.getElementById('inam-entry-paye').value = r.montantPaye||'';
+    document.getElementById('inam-entry-statut').value = r.statut||'non payé';
+    document.getElementById('inam-entry-virement').value = r.dateVirement||'';
+    openModal('modal-inam-entry');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function saveInamEntry() {
+  const id             = document.getElementById('inam-entry-id').value;
+  const date           = document.getElementById('inam-entry-date').value;
+  const entite         = document.getElementById('inam-entry-entite').value;
+  const quinzaine      = document.getElementById('inam-entry-quinzaine').value.trim();
+  const montantFacture = parseFloat(document.getElementById('inam-entry-facture').value)||0;
+  const montantPaye    = parseFloat(document.getElementById('inam-entry-paye').value)||0;
+  const statut         = document.getElementById('inam-entry-statut').value;
+  const dateVirement   = document.getElementById('inam-entry-virement').value;
+  if (!date || !entite || !quinzaine) return toast('Veuillez remplir Date, Entité et Quinzaine','error');
+  try {
+    const data = { date, entite, quinzaine, montantFacture, montantPaye, statut, dateVirement };
+    if (id) { await updateSuiviInamAmu(id, data); } else { await saveSuiviInamAmu(data); }
     closeModal();
-    toast('Paiement enregistré ✓','success');
+    toast('Enregistrement sauvegardé ✓','success');
+    renderInamAmu();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function doDeleteInamEntry(id) {
+  if (!confirm('Supprimer cet enregistrement ?')) return;
+  try {
+    await deleteSuiviInamAmu(id);
+    toast('Supprimé','success');
     renderInamAmu();
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }

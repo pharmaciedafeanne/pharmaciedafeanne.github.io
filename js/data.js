@@ -244,11 +244,7 @@ async function saveSuiviInamAmu(data) {
 async function getAllSuiviInamAmu() {
   const snap = await inamRef().get();
   const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  list.sort((a, b) => {
-    const ka = a.periodKey || '';
-    const kb = b.periodKey || '';
-    return kb.localeCompare(ka);
-  });
+  list.sort((a, b) => (b.date||'').localeCompare(a.date||''));
   return list;
 }
 

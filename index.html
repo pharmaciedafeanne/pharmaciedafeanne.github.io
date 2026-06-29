@@ -429,26 +429,27 @@
 
       <!-- ── SUIVI INAM/AMU ─────────────────────────────── -->
       <div id="view-inam-amu" class="hidden">
-        <div class="card" style="margin-bottom:16px">
-          <div class="card-header">
-            <span class="card-title">🏥 Suivi des Paiements INAM / AMU</span>
-          </div>
-          <div class="inam-summary-row" id="inam-summary"></div>
-        </div>
+        <!-- Cartes résumé -->
+        <div class="inam-summary-row" id="inam-summary" style="margin-bottom:16px"></div>
+        <!-- Tableau principal -->
         <div class="card">
+          <div class="card-header">
+            <span class="card-title">🏥 Paiements INAM / AMU</span>
+            <button class="btn btn-primary" onclick="openNewInamEntry()">➕ Nouvelle entrée</button>
+          </div>
           <div class="table-wrapper">
             <table>
               <thead>
                 <tr>
-                  <th rowspan="2">Quinzaine</th>
-                  <th rowspan="2">Statut</th>
-                  <th colspan="3" class="th-dafeanne">INAM</th>
-                  <th colspan="3" class="th-depot">AMU</th>
-                  <th rowspan="2">Actions</th>
-                </tr>
-                <tr>
-                  <th class="th-dafeanne">Facturé</th><th class="th-dafeanne">Reçu</th><th class="th-dafeanne">Reste</th>
-                  <th class="th-depot">Facturé</th><th class="th-depot">Reçu</th><th class="th-depot">Reste</th>
+                  <th>Date</th>
+                  <th>Entité</th>
+                  <th>Quinzaine</th>
+                  <th>Montant Facturé</th>
+                  <th>Montant Payé</th>
+                  <th>Reste</th>
+                  <th>Statut</th>
+                  <th>Date Virement</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="inam-tbody"></tbody>
@@ -595,25 +596,61 @@
   </div>
 
   <!-- Modal Paiement INAM/AMU -->
-  <div class="modal modal-sm hidden" id="modal-inam-pay">
+  <!-- Modal Entrée INAM/AMU -->
+  <div class="modal modal-sm hidden" id="modal-inam-entry">
     <div class="modal-header">
-      <h3>💳 Enregistrer un paiement</h3>
+      <h3 id="inam-entry-title">🏥 Nouvelle entrée INAM / AMU</h3>
       <button class="btn-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
-      <input type="hidden" id="inam-pay-id">
-      <div style="font-weight:600;margin-bottom:12px;color:var(--primary)" id="inam-pay-lbl"></div>
+      <input type="hidden" id="inam-entry-id">
       <div class="form-row cols-2">
-        <div class="field"><label>INAM reçu (F)</label><input type="number" id="inam-pay-inam" min="0" value="0"></div>
-        <div class="field"><label>AMU reçu (F)</label><input type="number" id="inam-pay-amu" min="0" value="0"></div>
+        <div class="field">
+          <label>Date *</label>
+          <input type="date" id="inam-entry-date" required>
+        </div>
+        <div class="field">
+          <label>Entité *</label>
+          <select id="inam-entry-entite" required>
+            <option value="INAM">INAM</option>
+            <option value="AMU">AMU</option>
+          </select>
+        </div>
       </div>
       <div class="form-row">
-        <div class="field"><label>Date de virement</label><input type="date" id="inam-pay-date"></div>
+        <div class="field">
+          <label>Quinzaine *</label>
+          <input type="text" id="inam-entry-quinzaine" placeholder="Ex: Q1 JUIN 2025" required>
+        </div>
+      </div>
+      <div class="form-row cols-2">
+        <div class="field">
+          <label>Montant Facturé (F) *</label>
+          <input type="number" id="inam-entry-facture" min="0" value="0" required>
+        </div>
+        <div class="field">
+          <label>Montant Payé (F)</label>
+          <input type="number" id="inam-entry-paye" min="0" value="0">
+        </div>
+      </div>
+      <div class="form-row cols-2">
+        <div class="field">
+          <label>Statut</label>
+          <select id="inam-entry-statut">
+            <option value="non payé">Non payé</option>
+            <option value="partiel">Partiel</option>
+            <option value="payé">Payé</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Date de virement</label>
+          <input type="date" id="inam-entry-virement">
+        </div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
-      <button class="btn btn-success" onclick="saveInamPay()">💾 Enregistrer</button>
+      <button class="btn btn-success" onclick="saveInamEntry()">💾 Enregistrer</button>
     </div>
   </div>
 

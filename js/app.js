@@ -103,17 +103,48 @@ async function doLogout() {
 function showMainApp(user) {
   document.getElementById('login-page').classList.add('hidden');
   document.getElementById('setup-page').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
-  renderSidebar(user);
-  navigate('dashboard');
+  document.getElementById('admin-app').classList.add('hidden');
+
+  if (user.role === 'superadmin') {
+    document.getElementById('app').classList.add('hidden');
+    showAdminDashboard();
+  } else {
+    const pid = user.pharmacieId || 'DAFEANNE';
+    setPharmacieContext(pid);
+    document.getElementById('app').classList.remove('hidden');
+    renderSidebar(user);
+    navigate('dashboard');
+  }
+}
+
+// Retour vers le dashboard admin (depuis une pharmacie)
+function backToAdmin() {
+  document.getElementById('app').classList.add('hidden');
+  showAdminDashboard();
 }
 
 function renderSidebar(user) {
   const u = user || currentUser;
   document.getElementById('sb-name').textContent = u.name;
-  document.getElementById('sb-role').textContent = u.role === 'superadmin' ? 'Super Administrateur' : 'Utilisateur';
+  const roleLabel = { superadmin: 'Super Admin', titulaire: 'Pharmacien Titulaire', operateur: 'Opérateur' };
+  document.getElementById('sb-role').textContent = roleLabel[u.role] || u.role;
   document.getElementById('sb-avatar').textContent = u.name.charAt(0).toUpperCase();
-  document.getElementById('nav-users').style.display = u.role === 'superadmin' ? 'flex' : 'none';
+
+  const isSuperAdmin = u.role === 'superadmin';
+  const isTitulaire  = u.role === 'titulaire';
+  const isOperateur  = u.role === 'operateur';
+
+  // Imports : masqué pour opérateur
+  const navImport = document.getElementById('nav-import');
+  if (navImport) navImport.style.display = isOperateur ? 'none' : 'flex';
+
+  // Administration : titulaire peut gérer ses opérateurs, superadmin non (a son propre dashboard)
+  const navUsers = document.getElementById('nav-users');
+  if (navUsers) navUsers.style.display = (isTitulaire) ? 'flex' : 'none';
+
+  // Bouton retour admin (si superadmin navigue dans une pharmacie)
+  const navBack = document.getElementById('nav-back-admin');
+  if (navBack) navBack.style.display = isSuperAdmin ? 'flex' : 'none';
 }
 
 function setActiveNav(view) {
@@ -254,7 +285,7 @@ async function renderDetail(key) {
 
   let period;
   try {
-    const snap = await getDB().collection('quinzaines').doc(key).get();
+    const snap = await getQuinzaineDocRef(key).get();
     if (!snap.exists) { navigate('quinzaines'); return; }
     period = { key: snap.id, ...snap.data() };
   } catch(e) { toast('Erreur chargement quinzaine','error'); return; }
@@ -368,7 +399,7 @@ function toggleLot(num) {
 
 // ── Ajouter un bon à une quinzaine existante ─────────────────
 async function addBonToExisting(periodKey, lotNum) {
-  const snap = await getDB().collection('quinzaines').doc(periodKey).get();
+  const snap = await getQuinzaineDocRef(periodKey).get();
   if (!snap.exists) return;
   const period = snap.data();
   const lot = (period.lots || []).find(l => l.numero === lotNum);
@@ -397,7 +428,7 @@ async function addBonToExisting(periodKey, lotNum) {
 // ── Supprimer un bon d'une quinzaine existante ───────────────
 async function deleteExistingBon(periodKey, lotNum, bonId) {
   if (!confirm('Supprimer ce bon ?')) return;
-  const snap = await getDB().collection('quinzaines').doc(periodKey).get();
+  const snap = await getQuinzaineDocRef(periodKey).get();
   if (!snap.exists) return;
   const period = snap.data();
   const lot = (period.lots || []).find(l => l.numero === lotNum);
@@ -413,7 +444,7 @@ async function deleteExistingBon(periodKey, lotNum, bonId) {
 
 // ── Modifier un bon ──────────────────────────────────────────
 async function openEditBon(periodKey, lotNum, bonId) {
-  const snap = await getDB().collection('quinzaines').doc(periodKey).get();
+  const snap = await getQuinzaineDocRef(periodKey).get();
   if (!snap.exists) return;
   const period = snap.data();
   const lot = (period.lots||[]).find(l => l.numero === lotNum);
@@ -703,28 +734,6 @@ document.addEventListener('DOMContentLoaded', () => {
 //  UTILISATEURS
 // ══════════════════════════════════════════════════════════════
 
-async function renderUsers() {
-  if (!currentUser || currentUser.role !== 'superadmin') { navigate('dashboard'); return; }
-  const tbody = document.getElementById('users-tbody');
-  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px">Chargement…</td></tr>';
-  try {
-    const users = await getAllUsers();
-    tbody.innerHTML = users.map(u => `
-      <tr>
-        <td><strong>${esc(u.name)}</strong></td>
-        <td>${esc(u.email)}</td>
-        <td><span class="badge badge-${u.role==='superadmin'?'superadmin':'user'}">${u.role==='superadmin'?'Super Admin':'Utilisateur'}</span></td>
-        <td>${u.createdAt ? new Date(u.createdAt.seconds*1000).toLocaleDateString('fr-FR') : '—'}</td>
-        <td>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-outline btn-sm" onclick="openEditUser('${u.uid}')">✏️ Modifier</button>
-            ${u.uid !== currentUser.uid ? `<button class="btn btn-danger btn-sm" onclick="doDeleteUser('${u.uid}','${esc(u.name)}')">🗑️</button>` : ''}
-          </div>
-        </td>
-      </tr>`).join('');
-  } catch(e) { toast('Erreur chargement utilisateurs','error'); }
-}
-
 function openAddUser() {
   document.getElementById('modal-user-title').textContent = 'Nouvel utilisateur';
   document.getElementById('user-form').reset();
@@ -766,7 +775,8 @@ async function doSaveUser() {
       toast('Utilisateur modifié ✓','success');
     } else {
       if (!password) { toast('Le mot de passe est obligatoire','error'); btn.disabled=false; btn.textContent='💾 Enregistrer'; return; }
-      await createAccount(name, email, password, role);
+      const pharmacieId = currentUser.role === 'titulaire' ? currentUser.pharmacieId : (_currentPharmacieId || null);
+      await createAccount(name, email, password, role, pharmacieId);
       toast('Utilisateur créé ✓','success');
     }
     closeModal();
@@ -790,7 +800,7 @@ async function doDeleteUser(uid, name) {
 
 async function doExportPDF(key) {
   try {
-    const snap = await getDB().collection('quinzaines').doc(key).get();
+    const snap = await getQuinzaineDocRef(key).get();
     if (!snap.exists) return;
     const p = { key: snap.id, ...snap.data() };
     exportPDF([p], `INAM_AMU_${p.quinzaine}_${MOIS_APP[p.month]}_${p.year}.pdf`, periodLbl(p));
@@ -799,7 +809,7 @@ async function doExportPDF(key) {
 
 async function doExportExcel(key) {
   try {
-    const snap = await getDB().collection('quinzaines').doc(key).get();
+    const snap = await getQuinzaineDocRef(key).get();
     if (!snap.exists) return;
     const p = { key: snap.id, ...snap.data() };
     exportExcel([p], `INAM_AMU_${p.quinzaine}_${MOIS_APP[p.month]}_${p.year}.xlsx`);
@@ -823,7 +833,7 @@ async function exportAllExcel() {
 }
 
 async function doDeletePeriod(key) {
-  const snap = await getDB().collection('quinzaines').doc(key).get();
+  const snap = await getQuinzaineDocRef(key).get();
   if (!snap.exists) return;
   const p = snap.data();
   if (!confirm(`Supprimer définitivement la quinzaine ${periodLbl(p)} ?\nCette action est irréversible.`)) return;
@@ -875,6 +885,279 @@ function periodLbl(p) {
 }
 function esc(str) {
   return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SUPER ADMIN DASHBOARD
+// ══════════════════════════════════════════════════════════════
+
+async function showAdminDashboard() {
+  document.getElementById('login-page').classList.add('hidden');
+  document.getElementById('setup-page').classList.add('hidden');
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('admin-app').classList.remove('hidden');
+  document.getElementById('admin-name').textContent = currentUser.name;
+  document.getElementById('admin-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
+
+  // Créer la pharmacie DAFEANNE si elle n'existe pas encore
+  try {
+    const dafeanne = await getPharmacie('DAFEANNE');
+    if (!dafeanne) {
+      await createPharmacie({ code: 'DAFEANNE', nom: 'Pharmacie Dafeanne', telephone: '' });
+    }
+  } catch(e) { console.warn('Init DAFEANNE:', e.message); }
+
+  adminNavigate('admin-overview');
+}
+
+function adminNavigate(view) {
+  ['admin-overview','admin-pharmacies','admin-abonnements'].forEach(v => {
+    const el = document.getElementById(v);
+    if (el) el.classList.add('hidden');
+  });
+  document.querySelectorAll('.admin-nav-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.view === view));
+  const el = document.getElementById(view);
+  if (el) el.classList.remove('hidden');
+
+  if (view === 'admin-overview')     renderAdminOverview();
+  if (view === 'admin-pharmacies')   renderAdminPharmacies();
+  if (view === 'admin-abonnements')  renderAdminAbonnements();
+}
+
+async function renderAdminOverview() {
+  try {
+    const pharmacies = await getAllPharmacies();
+    const users = await getAllUsers();
+    const actives = pharmacies.filter(p => p.abonnement && p.abonnement.statut === 'actif').length;
+    const essai   = pharmacies.filter(p => p.abonnement && p.abonnement.statut === 'essai').length;
+
+    document.getElementById('adm-stat-pharmacies').textContent = pharmacies.length;
+    document.getElementById('adm-stat-users').textContent      = users.length;
+    document.getElementById('adm-stat-actives').textContent    = actives;
+    document.getElementById('adm-stat-essai').textContent      = essai;
+
+    const grid = document.getElementById('adm-pharmacies-grid');
+    if (!pharmacies.length) {
+      grid.innerHTML = `<div style="color:rgba(255,255,255,.4);padding:30px;text-align:center;grid-column:1/-1">
+        Aucune pharmacie. Créez-en une ci-dessous.</div>`;
+      return;
+    }
+    grid.innerHTML = pharmacies.map(ph => {
+      const statut = ph.abonnement ? ph.abonnement.statut : 'essai';
+      const statutColors = { actif:'#00b894', essai:'#fdcb6e', expiré:'#e17055', suspendu:'#636e72' };
+      const color = statutColors[statut] || '#636e72';
+      return `
+      <div class="admin-pharma-card">
+        <div class="apc-code">${esc(ph.code)}</div>
+        <div class="apc-name">${esc(ph.nom || ph.code)}</div>
+        ${ph.telephone ? `<div class="apc-info">📞 ${esc(ph.telephone)}</div>` : ''}
+        <div class="apc-status" style="background:${color}20;color:${color};border:1px solid ${color}40">
+          ${statut.toUpperCase()}
+        </div>
+        <div class="apc-actions">
+          <button class="btn-admin-access" onclick="enterPharmacie('${ph.id}')">🔑 Accéder</button>
+          <button class="btn-admin-edit" onclick="openEditPharmacie('${ph.id}')">✏️</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function renderAdminPharmacies() {
+  const pharmacies = await getAllPharmacies();
+  const users = await getAllUsers();
+  const tbody = document.getElementById('adm-pharma-tbody');
+  tbody.innerHTML = pharmacies.map(ph => {
+    const phUsers = users.filter(u => u.pharmacieId === ph.id).length;
+    const statut = ph.abonnement ? ph.abonnement.statut : 'essai';
+    return `<tr>
+      <td><strong>${esc(ph.code)}</strong></td>
+      <td>${esc(ph.nom || '—')}</td>
+      <td>${esc(ph.telephone || '—')}</td>
+      <td>${phUsers}</td>
+      <td><span class="badge-statut statut-${statut}">${statut}</span></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" onclick="enterPharmacie('${ph.id}')">🔑 Accéder</button>
+          <button class="btn btn-sm btn-outline" onclick="openEditPharmacie('${ph.id}')">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="doDeletePharmacie('${ph.id}','${esc(ph.nom||ph.code)}')">🗑️</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" style="text-align:center;padding:30px;opacity:.5">Aucune pharmacie</td></tr>`;
+}
+
+async function renderAdminAbonnements() {
+  const pharmacies = await getAllPharmacies();
+  const actives  = pharmacies.filter(p => p.abonnement?.statut === 'actif').length;
+  const expires  = pharmacies.filter(p => p.abonnement?.statut === 'expiré').length;
+  const essais   = pharmacies.filter(p => p.abonnement?.statut === 'essai').length;
+
+  document.getElementById('adm-abo-actif').textContent   = actives;
+  document.getElementById('adm-abo-expire').textContent  = expires;
+  document.getElementById('adm-abo-essai').textContent   = essais;
+
+  const tbody = document.getElementById('adm-abo-tbody');
+  tbody.innerHTML = pharmacies.map(ph => {
+    const abo = ph.abonnement || {};
+    const statut = abo.statut || 'essai';
+    return `<tr>
+      <td><strong>${esc(ph.code)}</strong> — ${esc(ph.nom||'')}</td>
+      <td><span class="badge-statut statut-${statut}">${statut}</span></td>
+      <td>${abo.plan || '—'}</td>
+      <td>${abo.dateDebut ? new Date(abo.dateDebut.seconds*1000).toLocaleDateString('fr-FR') : '—'}</td>
+      <td>${abo.dateFin  ? new Date(abo.dateFin.seconds*1000).toLocaleDateString('fr-FR')  : '—'}</td>
+      <td>
+        <button class="btn btn-sm btn-outline" onclick="openGererAbonnement('${ph.id}')">⚙️ Gérer</button>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" style="text-align:center;padding:30px;opacity:.5">Aucune pharmacie</td></tr>`;
+}
+
+// Entrer dans une pharmacie (super admin)
+async function enterPharmacie(pharmacieId) {
+  try {
+    const ph = await getPharmacie(pharmacieId);
+    if (!ph) { toast('Pharmacie introuvable','error'); return; }
+
+    // Migration des données existantes si première fois pour DAFEANNE
+    if (pharmacieId === 'DAFEANNE') {
+      const migrated = await migrateRootQuinzaines();
+      if (migrated > 0) toast(`${migrated} quinzaines migrées vers DAFEANNE`, 'success');
+    }
+
+    setPharmacieContext(pharmacieId);
+    document.getElementById('admin-app').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    renderSidebar(currentUser);
+    document.getElementById('sb-pharma-name').textContent = ph.nom || ph.code;
+    navigate('dashboard');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+// Créer une nouvelle pharmacie
+function openNewPharmacie() {
+  document.getElementById('pharma-form').reset();
+  document.getElementById('pharma-form-id').value = '';
+  document.getElementById('adm-pharma-modal-title').textContent = 'Nouvelle Pharmacie';
+  openAdminModal('adm-modal-pharma');
+}
+
+function openEditPharmacie(id) {
+  getAllPharmacies().then(list => {
+    const ph = list.find(p => p.id === id);
+    if (!ph) return;
+    document.getElementById('pharma-form-id').value   = id;
+    document.getElementById('pharma-code').value       = ph.code;
+    document.getElementById('pharma-nom').value        = ph.nom || '';
+    document.getElementById('pharma-telephone').value  = ph.telephone || '';
+    document.getElementById('adm-pharma-modal-title').textContent = 'Modifier Pharmacie';
+    openAdminModal('adm-modal-pharma');
+  });
+}
+
+document.getElementById('pharma-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id   = document.getElementById('pharma-form-id').value;
+  const code = document.getElementById('pharma-code').value.trim().toUpperCase();
+  const nom  = document.getElementById('pharma-nom').value.trim();
+  const tel  = document.getElementById('pharma-telephone').value.trim();
+  try {
+    if (id) {
+      await updatePharmacie(id, { nom, telephone: tel });
+    } else {
+      await createPharmacie({ code, nom, telephone: tel });
+    }
+    closeAdminModal();
+    toast(id ? 'Pharmacie modifiée' : 'Pharmacie créée', 'success');
+    renderAdminPharmacies();
+    renderAdminOverview();
+  } catch(err) { toast('Erreur: '+err.message,'error'); }
+});
+
+async function doDeletePharmacie(id, nom) {
+  if (!confirm(`Supprimer la pharmacie "${nom}" ?\nToutes ses données seront perdues.`)) return;
+  try {
+    await deletePharmacie(id);
+    toast('Pharmacie supprimée','success');
+    renderAdminPharmacies();
+    renderAdminOverview();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+// Gérer abonnement
+function openGererAbonnement(pharmacieId) {
+  document.getElementById('abo-pharma-id').value = pharmacieId;
+  getAllPharmacies().then(list => {
+    const ph = list.find(p => p.id === pharmacieId);
+    if (!ph) return;
+    const abo = ph.abonnement || {};
+    document.getElementById('abo-statut').value = abo.statut || 'essai';
+    document.getElementById('abo-plan').value   = abo.plan   || '';
+    openAdminModal('adm-modal-abonnement');
+  });
+}
+
+document.getElementById('abo-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id     = document.getElementById('abo-pharma-id').value;
+  const statut = document.getElementById('abo-statut').value;
+  const plan   = document.getElementById('abo-plan').value.trim();
+  try {
+    await updatePharmacie(id, { abonnement: {
+      statut, plan: plan || null,
+      dateDebut: statut === 'actif' ? firebase.firestore.FieldValue.serverTimestamp() : null,
+      dateFin: null
+    }});
+    closeAdminModal();
+    toast('Abonnement mis à jour','success');
+    renderAdminAbonnements();
+  } catch(err) { toast('Erreur: '+err.message,'error'); }
+});
+
+function openAdminModal(id) {
+  document.getElementById('admin-modal-overlay').classList.remove('hidden');
+  document.querySelectorAll('.admin-modal').forEach(m => m.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+function closeAdminModal() {
+  document.getElementById('admin-modal-overlay').classList.add('hidden');
+}
+document.getElementById('admin-modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('admin-modal-overlay')) closeAdminModal();
+});
+
+// ══════════════════════════════════════════════════════════════
+//  GESTION UTILISATEURS (titulaire)
+// ══════════════════════════════════════════════════════════════
+
+async function renderUsers() {
+  if (!currentUser || (currentUser.role !== 'superadmin' && currentUser.role !== 'titulaire')) {
+    navigate('dashboard'); return;
+  }
+  const tbody = document.getElementById('users-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px">Chargement…</td></tr>';
+  try {
+    const users = currentUser.role === 'titulaire'
+      ? await getUsersByPharmacie(currentUser.pharmacieId)
+      : await getAllUsers();
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td><strong>${esc(u.name)}</strong></td>
+        <td>${esc(u.email)}</td>
+        <td><span class="badge badge-${u.role==='superadmin'?'superadmin':u.role==='titulaire'?'titulaire':'user'}">${
+          u.role==='superadmin'?'Super Admin':u.role==='titulaire'?'Titulaire':'Opérateur'
+        }</span></td>
+        <td>${u.createdAt ? new Date(u.createdAt.seconds*1000).toLocaleDateString('fr-FR') : '—'}</td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline btn-sm" onclick="openEditUser('${u.uid}')">✏️ Modifier</button>
+            ${u.uid !== currentUser.uid ? `<button class="btn btn-danger btn-sm" onclick="doDeleteUser('${u.uid}','${esc(u.name)}')">🗑️</button>` : ''}
+          </div>
+        </td>
+      </tr>`).join('');
+  } catch(e) { toast('Erreur chargement utilisateurs','error'); }
 }
 
 // ══════════════════════════════════════════════════════════════

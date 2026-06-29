@@ -1,4 +1,4 @@
-// ===== APPLICATION PRINCIPALE =====
+// ===== APPLICATION PRINCIPALE v20260701 =====
 
 const MOIS_APP = ['','Janvier','Février','Mars','Avril','Mai','Juin',
   'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];

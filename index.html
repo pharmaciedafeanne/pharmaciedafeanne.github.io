@@ -29,11 +29,11 @@
       <form id="login-form" autocomplete="off">
         <div id="login-code-row" class="lp-field">
           <label>CODE PHARMACIE</label>
-          <input type="text" id="login-code" placeholder="Ex: DAFEANNE" style="text-transform:uppercase">
+          <input type="text" id="login-code" placeholder="Ex: DAFEANNE" style="text-transform:uppercase" autocomplete="off">
         </div>
-        <div class="lp-field">
-          <label>EMAIL</label>
-          <input type="email" id="login-email" placeholder="votre@email.com" autocomplete="email" required>
+        <div id="login-email-row" class="lp-field hidden">
+          <label>EMAIL (Administrateur)</label>
+          <input type="email" id="login-email" placeholder="votre@email.com" autocomplete="email">
         </div>
         <div class="lp-field">
           <label>MOT DE PASSE</label>
@@ -73,8 +73,7 @@
       <div class="nav-item" data-view="fournisseurs" id="nav-fournisseurs" onclick="navigate('fournisseurs')"><span class="icon">🏪</span> Fournisseurs</div>
 
       <div class="nav-section-label" id="nav-section-data">Données</div>
-      <div class="nav-item" onclick="exportAllPDF()"><span class="icon">📄</span> Exporter PDF</div>
-      <div class="nav-item" onclick="exportAllExcel()"><span class="icon">📊</span> Exporter Excel</div>
+      <div class="nav-item" data-view="donnees" id="nav-donnees" onclick="navigate('donnees')"><span class="icon">📊</span> Section Données</div>
 
       <div class="nav-section-label">Administration</div>
       <div class="nav-item" data-view="import" id="nav-import" onclick="navigate('import')"><span class="icon">📥</span> Importer Excel</div>
@@ -493,12 +492,19 @@
           <div class="frs-stat-card" style="border-color:var(--success)"><div id="frs-stat-paye" class="frs-stat-val" style="color:var(--success)">0</div><div>Payées</div></div>
         </div>
         <div class="card">
-          <div class="card-header">
+          <div class="card-header" style="flex-wrap:wrap;gap:10px">
             <span class="card-title">🏪 Factures Fournisseurs</span>
-            <div style="display:flex;gap:8px;align-items:center">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <div class="filter-tabs">
+                <button class="filter-tab active" id="frs-tab-all"    onclick="setFrsFilter('all')">Toutes</button>
+                <button class="filter-tab"        id="frs-tab-apayer" onclick="setFrsFilter('apayer')">À payer</button>
+                <button class="filter-tab"        id="frs-tab-payees" onclick="setFrsFilter('payees')">Payées</button>
+              </div>
               <select id="frs-filter-month" onchange="renderFournisseurs()" class="filter-select">
                 <option value="">Tous les mois</option>
               </select>
+              <button class="btn btn-outline btn-sm" onclick="exportFrsExcel()">📊 Excel</button>
+              <button class="btn btn-outline btn-sm" onclick="exportFrsPDF()">📄 PDF</button>
               <button class="btn btn-primary" onclick="openNewFacture()">➕ Nouvelle facture</button>
             </div>
           </div>
@@ -508,6 +514,41 @@
               <thead><tr><th>Date</th><th>Fournisseur</th><th>Désignation</th><th>Montant</th><th>Échéance</th><th>Paiement</th><th>Statut</th><th>Actions</th></tr></thead>
               <tbody id="frs-tbody"></tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION DONNÉES ─────────────────────────── -->
+      <div id="view-donnees" class="hidden">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📊 Section Données — Exports</span>
+          </div>
+          <div class="card-body" style="padding:24px">
+            <div class="form-row cols-3" style="margin-bottom:20px">
+              <div class="field">
+                <label>Module</label>
+                <select id="donnees-module" onchange="previewDonnees()">
+                  <option value="inam">INAM / AMU</option>
+                  <option value="caisse">Petite Caisse</option>
+                  <option value="fournisseurs">Fournisseurs</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Date début</label>
+                <input type="date" id="donnees-date-debut" onchange="previewDonnees()">
+              </div>
+              <div class="field">
+                <label>Date fin</label>
+                <input type="date" id="donnees-date-fin" onchange="previewDonnees()">
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="exportDonneesExcel()">📊 Exporter Excel</button>
+              <button class="btn btn-outline" onclick="exportDonneesPDF()">📄 Exporter PDF</button>
+            </div>
+            <div id="donnees-preview-count" style="color:var(--text-muted);font-size:14px;margin-bottom:12px"></div>
+            <div id="donnees-preview-table"></div>
           </div>
         </div>
       </div>
@@ -785,7 +826,13 @@
         <div class="field"><label>Observations</label><textarea id="facture-obs" rows="2"></textarea></div>
       </div>
       <div class="form-row">
-        <label class="perm-check"><input type="checkbox" id="facture-prospective"> Dépense prospective (échéance future)</label>
+        <label class="perm-check"><input type="checkbox" id="facture-prospective" onchange="onProspectiveChange()"> Dépense prospective (échéance future)</label>
+      </div>
+      <div class="form-row" id="facture-alerte-row" style="display:none">
+        <div class="field">
+          <label>Alerte avant l'échéance (jours)</label>
+          <input type="number" id="facture-alerte-jours" min="1" max="365" value="7" placeholder="Ex: 7">
+        </div>
       </div>
     </div>
     <div class="modal-footer">

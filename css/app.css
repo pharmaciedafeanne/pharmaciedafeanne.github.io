@@ -450,6 +450,10 @@ td.amount.depot-sub    { background: rgba(0,150,199,.05); }
 .frs-stat-val  { font-size:22px; font-weight:800; color:var(--primary); margin-bottom:2px; }
 .frs-notif-bar { background:rgba(231,76,60,.08); border-bottom:2px solid rgba(231,76,60,.3); padding:10px 16px; font-size:13px; color:var(--danger); font-weight:600; }
 .filter-select { padding:7px 10px; border:1.5px solid var(--border); border-radius:6px; font-size:13px; background:white; }
+.filter-tabs { display:flex; gap:0; border:1.5px solid var(--border); border-radius:6px; overflow:hidden; }
+.filter-tab  { padding:6px 14px; font-size:12px; font-weight:600; background:var(--card); border:none; cursor:pointer; color:var(--text-muted); transition:background .15s,color .15s; }
+.filter-tab:hover  { background:var(--bg); }
+.filter-tab.active { background:var(--primary); color:#fff; }
 .badge-frs-paye    { padding:3px 10px; border-radius:10px; font-size:11px; font-weight:700; background:rgba(39,174,96,.12);  color:var(--success); }
 .badge-frs-encours { padding:3px 10px; border-radius:10px; font-size:11px; font-weight:700; background:rgba(243,156,18,.12); color:var(--warning); }
 .badge-frs-nonpaye { padding:3px 10px; border-radius:10px; font-size:11px; font-weight:700; background:rgba(231,76,60,.1);  color:var(--danger);  }

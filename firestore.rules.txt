@@ -1,0 +1,42 @@
+// ======= RÈGLES FIRESTORE — à copier dans Firebase Console =======
+// Firestore Database > Rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // loginCodes : lecture publique (pour login par code pharmacie)
+    // Contient seulement { emails: [...] } par pharmacieId
+    match /loginCodes/{code} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // users : lecture publique pour le fallback login (email non sensible)
+    // écriture réservée aux utilisateurs authentifiés
+    match /users/{uid} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // config : lecture/écriture auth uniquement
+    match /config/{doc} {
+      allow read, write: if request.auth != null;
+    }
+
+    // pharmacies : document racine
+    match /pharmacies/{pharmacieId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // sous-collections de chaque pharmacie
+    match /pharmacies/{pharmacieId}/{collection}/{document} {
+      allow read, write: if request.auth != null;
+    }
+
+    // accès récursif complet aux sous-collections imbriquées
+    match /pharmacies/{pharmacieId}/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

@@ -62,15 +62,18 @@ function startLoginClock() {
 let _adminMode = false;
 function toggleAdminLogin() {
   _adminMode = !_adminMode;
-  const codeRow = document.getElementById('login-code-row');
-  const linkEl  = document.getElementById('lp-admin-link');
-  const btn     = document.getElementById('btn-login');
+  const codeRow  = document.getElementById('login-code-row');
+  const emailRow = document.getElementById('login-email-row');
+  const linkEl   = document.getElementById('lp-admin-link');
+  const btn      = document.getElementById('btn-login');
   if (_adminMode) {
     codeRow.classList.add('hidden');
+    if (emailRow) emailRow.classList.remove('hidden');
     if (linkEl) linkEl.textContent = '↩ Retour connexion pharmacie';
     if (btn) btn.textContent = 'ACCÉDER AU PANNEAU ADMIN →';
   } else {
     codeRow.classList.remove('hidden');
+    if (emailRow) emailRow.classList.add('hidden');
     if (linkEl) linkEl.textContent = '🔑 Accès Administrateur';
     if (btn) btn.textContent = 'ACCÉDER À MA PHARMACIE →';
   }
@@ -79,26 +82,23 @@ function toggleAdminLogin() {
 document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const code  = (document.getElementById('login-code').value || '').trim().toUpperCase();
-  const email = document.getElementById('login-email').value.trim();
+  const email = (document.getElementById('login-email').value || '').trim();
   const pass  = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   const btn   = document.getElementById('btn-login');
   errEl.classList.add('hidden'); errEl.textContent = '';
   btn.disabled = true; btn.textContent = 'Connexion…';
   try {
-    const user = await login(email, pass);
-    // Vérification du code pharmacie (sauf mode admin)
-    if (!_adminMode && user.role !== 'superadmin') {
-      const pid = user.pharmacieId || 'DAFEANNE';
-      if (code && code !== pid) {
-        await logout();
-        throw new Error('Code pharmacie incorrect.');
-      }
+    if (_adminMode) {
+      // Mode admin : connexion par email direct
+      await login(email, pass);
+    } else {
+      // Mode pharmacie : connexion par code pharmacie partagé
+      await loginByCode(code, pass);
     }
     // onAuthReady appellera showMainApp
   } catch(err) {
-    errEl.textContent = err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found'
-      ? 'Email ou mot de passe incorrect.' : err.message;
+    errEl.textContent = err.message || 'Identifiants incorrects.';
     errEl.classList.remove('hidden');
     btn.disabled = false;
     btn.textContent = _adminMode ? 'ACCÉDER AU PANNEAU ADMIN →' : 'ACCÉDER À MA PHARMACIE →';
@@ -186,7 +186,7 @@ function navigate(view, params = {}) {
   if (params.key) appState.detailKey = params.key;
   setActiveNav(view);
 
-  ['dashboard','quinzaines','detail','import','nouvelle','users','inam-amu','caisse','fournisseurs'].forEach(v => {
+  ['dashboard','quinzaines','detail','import','nouvelle','users','inam-amu','caisse','fournisseurs','donnees'].forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.classList.add('hidden');
   });
@@ -202,7 +202,8 @@ function navigate(view, params = {}) {
     users:        '👥 Mon Équipe — Opérateurs',
     'inam-amu':   '🏥 Suivi Paiements INAM / AMU',
     caisse:       '💰 Petite Caisse',
-    fournisseurs: '🏭 Suivi Fournisseurs'
+    fournisseurs: '🏭 Suivi Fournisseurs',
+    donnees:      '📊 Section Données — Exports'
   };
   document.getElementById('content-title').textContent = titles[view] || '';
 
@@ -215,7 +216,8 @@ function navigate(view, params = {}) {
     users:        renderUsers,
     'inam-amu':   renderInamAmu,
     caisse:       renderCaisse,
-    fournisseurs: renderFournisseurs
+    fournisseurs: renderFournisseurs,
+    donnees:      renderDonnees
   }[view] || (() => {}))();
 }
 
@@ -1697,6 +1699,17 @@ function toggleProspect(cb) {
 //  SUIVI FOURNISSEURS
 // ══════════════════════════════════════════════════════════════
 
+let _frsStatutFilter = 'all'; // 'all' | 'apayer' | 'payees'
+
+function setFrsFilter(f) {
+  _frsStatutFilter = f;
+  ['all','apayer','payees'].forEach(k => {
+    const el = document.getElementById('frs-tab-' + k);
+    if (el) el.classList.toggle('active', k === f);
+  });
+  renderFournisseurs();
+}
+
 async function renderFournisseurs() {
   const tableBody = document.getElementById('frs-tbody');
   if (!tableBody) return;
@@ -1706,35 +1719,42 @@ async function renderFournisseurs() {
     const now  = Date.now();
     const limit72 = now + 72 * 3600 * 1000;
 
-    // Alertes 72h
-    const alerts = list.filter(f => f.statut !== 'payé' && f.echeance && new Date(f.echeance).getTime() <= limit72 && new Date(f.echeance).getTime() >= now);
+    // Alertes 72h ou selon alerteJours custom
+    const alerts = list.filter(f => {
+      if (f.statut === 'payé') return false;
+      if (!f.echeance) return false;
+      const ts = new Date(f.echeance).getTime();
+      const jours = f.alerteJours ? f.alerteJours * 86400000 : 72 * 3600 * 1000;
+      return ts >= now && ts <= now + jours;
+    });
     const notifBar = document.getElementById('frs-notif-bar');
     if (notifBar) {
       if (alerts.length) {
         notifBar.classList.remove('hidden');
-        notifBar.textContent = `⚠️ ${alerts.length} facture(s) arrivent à échéance dans les 72h : ${alerts.map(f=>esc(f.fournisseur)).join(', ')}`;
+        notifBar.textContent = `⚠️ ${alerts.length} facture(s) arrivent à échéance prochainement : ${alerts.map(f=>esc(f.fournisseur)).join(', ')}`;
       } else notifBar.classList.add('hidden');
     }
 
-    // Stats dans les cartes HTML existantes
-    const total    = list.reduce((s,f) => s+(f.montant||0), 0);
-    const paye     = list.reduce((s,f) => s+(f.statut==='payé'?(f.montant||0):0), 0);
-    const encours  = list.filter(f => f.statut === 'en cours').length;
-    const el_tot   = document.getElementById('frs-stat-total');
-    const el_due   = document.getElementById('frs-stat-due');
-    const el_enc   = document.getElementById('frs-stat-encours');
-    const el_pay   = document.getElementById('frs-stat-paye');
+    // Stats
+    const total   = list.reduce((s,f) => s+(f.montant||0), 0);
+    const paye    = list.reduce((s,f) => s+(f.statut==='payé'?(f.montant||0):0), 0);
+    const encours = list.filter(f => f.statut === 'en cours').length;
+    const el_tot  = document.getElementById('frs-stat-total');
+    const el_due  = document.getElementById('frs-stat-due');
+    const el_enc  = document.getElementById('frs-stat-encours');
+    const el_pay  = document.getElementById('frs-stat-paye');
     if (el_tot) el_tot.textContent = fmtA(total);
     if (el_due) el_due.textContent = alerts.length;
     if (el_enc) el_enc.textContent = encours;
     if (el_pay) el_pay.textContent = fmtA(paye);
 
     // Filtre par mois
-    const filtreEl = document.getElementById('frs-filter-month');
-    const filtreMois = filtreEl ? filtreEl.value : '';
-    const filtered = filtreMois
-      ? list.filter(f => (f.dateFacture||'').startsWith(filtreMois))
-      : list;
+    const filtreMois = (document.getElementById('frs-filter-month') || {}).value || '';
+    let filtered = filtreMois ? list.filter(f => (f.dateFacture||'').startsWith(filtreMois)) : list;
+
+    // Filtre par statut
+    if (_frsStatutFilter === 'apayer') filtered = filtered.filter(f => f.statut !== 'payé');
+    else if (_frsStatutFilter === 'payees') filtered = filtered.filter(f => f.statut === 'payé');
 
     if (!filtered.length) {
       tableBody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
@@ -1746,15 +1766,21 @@ async function renderFournisseurs() {
     tableBody.innerHTML = filtered.map(f => {
       const isAlerte = alerts.some(a => a.id === f.id);
       const badgeClass = f.statut === 'payé' ? 'badge-frs-paye' : isAlerte ? 'badge-frs-alerte' : f.statut === 'en cours' ? 'badge-frs-encours' : 'badge-frs-nonpaye';
-      const statutLbl  = f.statut === 'payé' ? 'Payé' : isAlerte ? '⚠️ Urgent' : f.statut || 'Non payé';
+      const statutLbl  = f.statut === 'payé' ? 'Payé' : isAlerte ? '⚠️ Urgent' : f.statut === 'en cours' ? 'En cours' : 'Non payé';
       return `<tr>
-        <td><strong>${esc(f.fournisseur||'—')}</strong></td>
-        <td>${esc(f.numFacture||'—')}</td>
         <td>${esc(f.dateFacture||'—')}</td>
-        <td>${esc(f.echeance||'—')}</td>
+        <td><strong>${esc(f.fournisseur||'—')}</strong></td>
+        <td>${esc(f.designation||'—')}</td>
         <td class="amount">${fmtA(f.montant)}</td>
-        <td class="amount" style="color:var(--success)">${fmtA(f.montantPaye)}</td>
-        <td><span class="${badgeClass}">${statutLbl}</span></td>
+        <td>${esc(f.echeance||'—')}</td>
+        <td class="amount" style="color:var(--success)">${fmtA(f.montantPaye||0)}</td>
+        <td>
+          <select class="filter-select" style="padding:3px 6px;font-size:12px" onchange="quickChangeStatutFacture('${f.id}', this.value)">
+            <option value="non payé" ${(f.statut||'non payé')==='non payé'?'selected':''}>Non payé</option>
+            <option value="en cours" ${f.statut==='en cours'?'selected':''}>En cours</option>
+            <option value="payé"     ${f.statut==='payé'?'selected':''}>Payé</option>
+          </select>
+        </td>
         <td>
           <button class="btn btn-outline btn-sm" onclick="openEditFacture('${f.id}')">✏️</button>
           <button class="btn btn-outline btn-sm" onclick="openPayFacture('${f.id}')">💳</button>
@@ -1765,6 +1791,63 @@ async function renderFournisseurs() {
   } catch(e) { console.error(e); toast('Erreur chargement fournisseurs','error'); }
 }
 
+async function quickChangeStatutFacture(id, newStatut) {
+  try {
+    await updateFacture(id, { statut: newStatut });
+    toast('Statut mis à jour ✓','success');
+    renderFournisseurs();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function exportFrsExcel() {
+  try {
+    const list = await getAllFactures();
+    const filtreMois = (document.getElementById('frs-filter-month')||{}).value||'';
+    let filtered = filtreMois ? list.filter(f=>(f.dateFacture||'').startsWith(filtreMois)) : list;
+    if (_frsStatutFilter === 'apayer') filtered = filtered.filter(f => f.statut !== 'payé');
+    else if (_frsStatutFilter === 'payees') filtered = filtered.filter(f => f.statut === 'payé');
+    if (!filtered.length) { toast('Aucune donnée à exporter','error'); return; }
+    const wb = XLSX.utils.book_new();
+    const rows = [['Date','Fournisseur','Désignation','Montant','Échéance','Montant payé','Statut','Observations']];
+    filtered.forEach(f => rows.push([f.dateFacture||'',f.fournisseur||'',f.designation||'',f.montant||0,f.echeance||'',f.montantPaye||0,f.statut||'',f.note||'']));
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Fournisseurs');
+    const label = filtreMois || 'COMPLET';
+    XLSX.writeFile(wb, `FOURNISSEURS_${label}.xlsx`);
+    toast('Export Excel OK ✓','success');
+  } catch(e) { toast('Erreur Excel: '+e.message,'error'); }
+}
+
+async function exportFrsPDF() {
+  try {
+    const list = await getAllFactures();
+    const filtreMois = (document.getElementById('frs-filter-month')||{}).value||'';
+    let filtered = filtreMois ? list.filter(f=>(f.dateFacture||'').startsWith(filtreMois)) : list;
+    if (_frsStatutFilter === 'apayer') filtered = filtered.filter(f => f.statut !== 'payé');
+    else if (_frsStatutFilter === 'payees') filtered = filtered.filter(f => f.statut === 'payé');
+    if (!filtered.length) { toast('Aucune donnée à exporter','error'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'landscape' });
+    doc.setFontSize(14);
+    doc.text('Suivi Fournisseurs' + (filtreMois ? ' — ' + filtreMois : ''), 14, 14);
+    doc.autoTable({
+      startY: 20,
+      head: [['Date','Fournisseur','Désignation','Montant','Échéance','Payé','Statut']],
+      body: filtered.map(f => [f.dateFacture||'',f.fournisseur||'',f.designation||'',fmtA(f.montant),f.echeance||'',fmtA(f.montantPaye||0),f.statut||'']),
+      styles: { fontSize: 9 }
+    });
+    const label = filtreMois || 'COMPLET';
+    doc.save(`FOURNISSEURS_${label}.pdf`);
+    toast('Export PDF OK ✓','success');
+  } catch(e) { toast('Erreur PDF: '+e.message,'error'); }
+}
+
+function onProspectiveChange() {
+  const checked = document.getElementById('facture-prospective').checked;
+  const row = document.getElementById('facture-alerte-row');
+  if (row) row.style.display = checked ? '' : 'none';
+}
+
 function openNewFacture() {
   document.getElementById('facture-id').value = '';
   ['facture-fournisseur','facture-date','facture-echeance','facture-designation','facture-obs','facture-mode','facture-ref'].forEach(id => {
@@ -1772,6 +1855,12 @@ function openNewFacture() {
   });
   document.getElementById('facture-montant').value = 0;
   document.getElementById('facture-statut').value  = 'non payé';
+  const prospEl = document.getElementById('facture-prospective');
+  if (prospEl) { prospEl.checked = false; }
+  const alerteRow = document.getElementById('facture-alerte-row');
+  if (alerteRow) alerteRow.style.display = 'none';
+  const alerteJoursEl = document.getElementById('facture-alerte-jours');
+  if (alerteJoursEl) alerteJoursEl.value = 7;
   document.getElementById('modal-facture-title').textContent = 'Nouvelle Facture';
   openModal('modal-facture');
 }
@@ -1788,6 +1877,12 @@ async function openEditFacture(id) {
   document.getElementById('facture-designation').value = f.designation || '';
   document.getElementById('facture-statut').value      = f.statut      || 'non payé';
   document.getElementById('facture-obs').value         = f.note        || '';
+  const prospEl = document.getElementById('facture-prospective');
+  if (prospEl) prospEl.checked = !!(f.prospective);
+  const alerteRow = document.getElementById('facture-alerte-row');
+  if (alerteRow) alerteRow.style.display = f.prospective ? '' : 'none';
+  const alerteJoursEl = document.getElementById('facture-alerte-jours');
+  if (alerteJoursEl) alerteJoursEl.value = f.alerteJours || 7;
   document.getElementById('modal-facture-title').textContent = 'Modifier Facture';
   openModal('modal-facture');
 }
@@ -1803,10 +1898,12 @@ async function saveFactureForm() {
   const note        = document.getElementById('facture-obs').value.trim();
   const mode        = document.getElementById('facture-mode').value;
   const ref         = document.getElementById('facture-ref').value.trim();
+  const prospective = document.getElementById('facture-prospective').checked;
+  const alerteJours = prospective ? (parseInt(document.getElementById('facture-alerte-jours').value)||7) : null;
   if (!fournisseur || !montant) { toast('Remplissez fournisseur et montant','error'); return; }
   try {
     const existing = id ? (await getAllFactures()).find(f => f.id === id) : null;
-    await saveFacture({ id: id||undefined, fournisseur, dateFacture, echeance, montant, designation, statut, note, mode, ref, montantPaye: existing ? (existing.montantPaye||0) : 0 });
+    await saveFacture({ id: id||undefined, fournisseur, dateFacture, echeance, montant, designation, statut, note, mode, ref, prospective, alerteJours, montantPaye: existing ? (existing.montantPaye||0) : 0 });
     closeModal();
     toast('Facture enregistrée ✓','success');
     renderFournisseurs();
@@ -1836,6 +1933,109 @@ async function doDeleteFacture(id) {
     toast('Facture supprimée','success');
     renderFournisseurs();
   } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SECTION DONNÉES — exports centralisés
+// ══════════════════════════════════════════════════════════════
+
+function renderDonnees() {
+  // Initialise la date fin à aujourd'hui si vide
+  const fin = document.getElementById('donnees-date-fin');
+  if (fin && !fin.value) fin.value = new Date().toISOString().slice(0,10);
+  previewDonnees();
+}
+
+async function _getDonneesData() {
+  const module = document.getElementById('donnees-module').value;
+  const debut  = document.getElementById('donnees-date-debut').value || '';
+  const fin    = document.getElementById('donnees-date-fin').value   || '';
+
+  function inRange(dateStr) {
+    if (!dateStr) return true;
+    if (debut && dateStr < debut) return false;
+    if (fin   && dateStr > fin)   return false;
+    return true;
+  }
+
+  if (module === 'inam') {
+    const list = await getAllSuiviInamAmu();
+    return list.filter(r => inRange(r.date));
+  } else if (module === 'caisse') {
+    const list = await getAllCaisseOps();
+    return list.filter(r => inRange(r.date));
+  } else if (module === 'fournisseurs') {
+    const list = await getAllFactures();
+    return list.filter(f => inRange(f.dateFacture));
+  }
+  return [];
+}
+
+async function previewDonnees() {
+  const countEl = document.getElementById('donnees-preview-count');
+  const tableEl = document.getElementById('donnees-preview-table');
+  if (!countEl || !tableEl) return;
+  try {
+    const data = await _getDonneesData();
+    countEl.textContent = `${data.length} enregistrement(s) sélectionné(s)`;
+  } catch(e) { /* silencieux */ }
+}
+
+async function exportDonneesExcel() {
+  try {
+    const module = document.getElementById('donnees-module').value;
+    const debut  = document.getElementById('donnees-date-debut').value || '';
+    const fin    = document.getElementById('donnees-date-fin').value   || '';
+    const data   = await _getDonneesData();
+    if (!data.length) { toast('Aucune donnée dans la période sélectionnée','error'); return; }
+    const wb = XLSX.utils.book_new();
+    let rows;
+    if (module === 'inam') {
+      rows = [['Date','Entité','Quinzaine','Montant facturé','Montant payé','Statut','Date virement']];
+      data.forEach(r => rows.push([r.date||'',r.entite||'',r.quinzaine||'',r.montantFacture||0,r.montantPaye||0,r.statut||'',r.dateVirement||'']));
+    } else if (module === 'caisse') {
+      rows = [['Date','Type','Désignation','Montant','Référence transaction','Observations']];
+      data.forEach(r => rows.push([r.date||'',r.type||'',r.designation||r.source||'',r.montant||0,r.refTransaction||'',r.obs||'']));
+    } else {
+      rows = [['Date','Fournisseur','Désignation','Montant','Échéance','Montant payé','Statut']];
+      data.forEach(r => rows.push([r.dateFacture||'',r.fournisseur||'',r.designation||'',r.montant||0,r.echeance||'',r.montantPaye||0,r.statut||'']));
+    }
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, module.toUpperCase());
+    const label = debut && fin ? `${debut}_${fin}` : debut || fin || 'COMPLET';
+    XLSX.writeFile(wb, `EXPORT_${module.toUpperCase()}_${label}.xlsx`);
+    toast('Export Excel OK ✓','success');
+  } catch(e) { toast('Erreur Excel: '+e.message,'error'); }
+}
+
+async function exportDonneesPDF() {
+  try {
+    const module = document.getElementById('donnees-module').value;
+    const debut  = document.getElementById('donnees-date-debut').value || '';
+    const fin    = document.getElementById('donnees-date-fin').value   || '';
+    const data   = await _getDonneesData();
+    if (!data.length) { toast('Aucune donnée dans la période sélectionnée','error'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'landscape' });
+    const titre = { inam:'INAM / AMU', caisse:'Petite Caisse', fournisseurs:'Fournisseurs' }[module] || module;
+    doc.setFontSize(14);
+    doc.text(`Rapport ${titre}${debut?' — du '+debut:''}${fin?' au '+fin:''}`, 14, 14);
+    let head, body;
+    if (module === 'inam') {
+      head = [['Date','Entité','Quinzaine','Montant facturé','Montant payé','Statut','Date virement']];
+      body = data.map(r => [r.date||'',r.entite||'',r.quinzaine||'',fmtA(r.montantFacture),fmtA(r.montantPaye),r.statut||'',r.dateVirement||'']);
+    } else if (module === 'caisse') {
+      head = [['Date','Type','Désignation','Montant','Réf. transaction','Obs.']];
+      body = data.map(r => [r.date||'',r.type||'',r.designation||r.source||'',fmtA(r.montant),r.refTransaction||'',r.obs||'']);
+    } else {
+      head = [['Date','Fournisseur','Désignation','Montant','Échéance','Payé','Statut']];
+      body = data.map(r => [r.dateFacture||'',r.fournisseur||'',r.designation||'',fmtA(r.montant),r.echeance||'',fmtA(r.montantPaye||0),r.statut||'']);
+    }
+    doc.autoTable({ startY:20, head, body, styles:{ fontSize:9 } });
+    const label = debut && fin ? `${debut}_${fin}` : debut || fin || 'COMPLET';
+    doc.save(`EXPORT_${module.toUpperCase()}_${label}.pdf`);
+    toast('Export PDF OK ✓','success');
+  } catch(e) { toast('Erreur PDF: '+e.message,'error'); }
 }
 
 // Vérification 72h au démarrage

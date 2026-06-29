@@ -15,7 +15,7 @@ function initApp() {
   try {
     initFirebase();
   } catch(e) {
-    showSetup();
+    console.error('Firebase init error:', e);
     return;
   }
 
@@ -23,52 +23,17 @@ function initApp() {
     if (status === 'logged_in') {
       showMainApp(user);
     } else {
-      // Le setup est définitivement terminé — afficher directement le login
-      // La page setup reste accessible via ?setup=1 dans l'URL si besoin
-      if (location.search.includes('setup=1')) {
-        showSetup();
-      } else {
-        showLogin();
-      }
+      showLogin();
     }
   });
 }
 
-// ══════════════════════════════════════════════════════════════
-//  SETUP (première configuration Firebase)
-// ══════════════════════════════════════════════════════════════
-
-function showSetup() {
-  document.getElementById('login-page').classList.add('hidden');
-  document.getElementById('app').classList.add('hidden');
-  document.getElementById('setup-page').classList.remove('hidden');
-}
-
-document.getElementById('setup-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const name  = document.getElementById('setup-name').value.trim();
-  const email = document.getElementById('setup-email').value.trim();
-  const pass  = document.getElementById('setup-password').value;
-  const errEl = document.getElementById('setup-error');
-  errEl.classList.remove('show');
-  try {
-    await seedSuperAdmin(name, email, pass);
-    localStorage.setItem('dafeanne_setup_done', '1');
-    document.getElementById('setup-page').classList.add('hidden');
-    showLogin();
-    toast('Compte super admin créé avec succès. Connectez-vous.', 'success');
-  } catch(err) {
-    errEl.textContent = err.message;
-    errEl.classList.add('show');
-  }
-});
 
 // ══════════════════════════════════════════════════════════════
 //  LOGIN
 // ══════════════════════════════════════════════════════════════
 
 function showLogin() {
-  document.getElementById('setup-page').classList.add('hidden');
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login-page').classList.remove('hidden');
   startLoginClock();
@@ -152,7 +117,6 @@ async function doLogout() {
 
 function showMainApp(user) {
   document.getElementById('login-page').classList.add('hidden');
-  document.getElementById('setup-page').classList.add('hidden');
   document.getElementById('admin-app').classList.add('hidden');
 
   if (user.role === 'superadmin') {
@@ -986,7 +950,6 @@ function esc(str) {
 
 async function showAdminDashboard() {
   document.getElementById('login-page').classList.add('hidden');
-  document.getElementById('setup-page').classList.add('hidden');
   document.getElementById('app').classList.add('hidden');
   document.getElementById('admin-app').classList.remove('hidden');
   document.getElementById('admin-name').textContent = currentUser.name;

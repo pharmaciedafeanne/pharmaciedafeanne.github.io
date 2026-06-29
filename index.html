@@ -84,15 +84,17 @@
       <div class="nav-item" data-view="nouvelle"   onclick="navigate('nouvelle')"><span class="icon">➕</span> Nouvelle saisie</div>
 
       <div class="nav-section-label">Données</div>
-      <div class="nav-item" data-view="import" onclick="navigate('import')"><span class="icon">📥</span> Importer Excel</div>
       <div class="nav-item" onclick="exportAllPDF()"><span class="icon">📄</span> Exporter tout PDF</div>
       <div class="nav-item" onclick="exportAllExcel()"><span class="icon">📊</span> Exporter tout Excel</div>
 
       <div class="nav-section-label">Administration</div>
+      <div class="nav-item" data-view="import" id="nav-import" onclick="navigate('import')"><span class="icon">📥</span> Importer Excel</div>
       <div class="nav-item" data-view="users" id="nav-users" onclick="navigate('users')"><span class="icon">👥</span> Utilisateurs</div>
+      <div class="nav-item" id="nav-back-admin" onclick="backToAdmin()" style="display:none"><span class="icon">⬅️</span> Dashboard Admin</div>
     </nav>
 
     <div class="sidebar-footer">
+      <div style="font-size:10px;color:rgba(255,255,255,.35);margin-bottom:6px;text-align:center" id="sb-pharma-name"></div>
       <div class="user-info">
         <div class="user-avatar" id="sb-avatar">A</div>
         <div class="user-details">
@@ -468,8 +470,8 @@
         <div class="field">
           <label>Rôle *</label>
           <select id="user-role">
-            <option value="user">Utilisateur</option>
-            <option value="superadmin">Super Administrateur</option>
+            <option value="operateur">Opérateur</option>
+            <option value="titulaire">Pharmacien Titulaire</option>
           </select>
         </div>
       </div>
@@ -484,6 +486,151 @@
 
 <!-- Toast container -->
 <div id="toast-container"></div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SUPER ADMIN APP (thème sombre)
+══════════════════════════════════════════════════════════════ -->
+<div id="admin-app" class="hidden">
+
+  <!-- SIDEBAR ADMIN -->
+  <aside class="admin-sidebar">
+    <div class="admin-brand">
+      <div class="admin-brand-icon">💊</div>
+      <div>
+        <div class="admin-brand-title">PHARMA PLATFORM</div>
+        <div class="admin-brand-sub">Super Admin</div>
+      </div>
+    </div>
+    <nav class="admin-nav">
+      <div class="admin-nav-item active" data-view="admin-overview"     onclick="adminNavigate('admin-overview')">    <span>📊</span> Vue d'ensemble</div>
+      <div class="admin-nav-item"        data-view="admin-pharmacies"   onclick="adminNavigate('admin-pharmacies')">  <span>🏥</span> Pharmacies</div>
+      <div class="admin-nav-item"        data-view="admin-abonnements"  onclick="adminNavigate('admin-abonnements')"> <span>💳</span> Abonnements</div>
+    </nav>
+    <div class="admin-sidebar-footer">
+      <div class="admin-user-info">
+        <div class="admin-avatar" id="admin-avatar">A</div>
+        <div>
+          <div class="admin-user-name" id="admin-name">—</div>
+          <div class="admin-user-role">Super Administrateur</div>
+        </div>
+      </div>
+      <button class="admin-btn-logout" onclick="doLogout()">🚪 Déconnexion</button>
+    </div>
+  </aside>
+
+  <!-- CONTENU ADMIN -->
+  <main class="admin-content">
+
+    <!-- VUE D'ENSEMBLE -->
+    <div id="admin-overview">
+      <div class="admin-topbar">
+        <h2 class="admin-page-title">🏥 Vue d'ensemble</h2>
+        <button class="btn-admin-primary" onclick="openNewPharmacie()">➕ Nouvelle pharmacie</button>
+      </div>
+      <div class="admin-stats-row">
+        <div class="admin-stat-card"><div class="asc-val" id="adm-stat-pharmacies">0</div><div class="asc-label">Pharmacies</div></div>
+        <div class="admin-stat-card"><div class="asc-val" id="adm-stat-users">0</div><div class="asc-label">Utilisateurs</div></div>
+        <div class="admin-stat-card"><div class="asc-val" id="adm-stat-actives">0</div><div class="asc-label">Abonnements actifs</div></div>
+        <div class="admin-stat-card"><div class="asc-val" id="adm-stat-essai">0</div><div class="asc-label">En essai</div></div>
+      </div>
+      <div class="admin-section-title">● TOUTES LES PHARMACIES</div>
+      <div class="admin-pharma-grid" id="adm-pharmacies-grid"></div>
+    </div>
+
+    <!-- PHARMACIES -->
+    <div id="admin-pharmacies" class="hidden">
+      <div class="admin-topbar">
+        <h2 class="admin-page-title">🏥 Gestion des Pharmacies</h2>
+        <button class="btn-admin-primary" onclick="openNewPharmacie()">➕ Nouvelle pharmacie</button>
+      </div>
+      <div class="admin-card">
+        <table class="admin-table">
+          <thead><tr><th>Code</th><th>Nom</th><th>Téléphone</th><th>Utilisateurs</th><th>Statut</th><th>Actions</th></tr></thead>
+          <tbody id="adm-pharma-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ABONNEMENTS -->
+    <div id="admin-abonnements" class="hidden">
+      <div class="admin-topbar">
+        <h2 class="admin-page-title">💳 Gestion des Abonnements</h2>
+      </div>
+      <div class="admin-stats-row" style="margin-bottom:20px">
+        <div class="admin-stat-card" style="border-color:#00b894"><div class="asc-val" style="color:#00b894" id="adm-abo-actif">0</div><div class="asc-label">Actifs</div></div>
+        <div class="admin-stat-card" style="border-color:#e17055"><div class="asc-val" style="color:#e17055" id="adm-abo-expire">0</div><div class="asc-label">Expirés</div></div>
+        <div class="admin-stat-card" style="border-color:#fdcb6e"><div class="asc-val" style="color:#fdcb6e" id="adm-abo-essai">0</div><div class="asc-label">Essai</div></div>
+      </div>
+      <div class="admin-card">
+        <table class="admin-table">
+          <thead><tr><th>Pharmacie</th><th>Statut</th><th>Plan</th><th>Début</th><th>Fin</th><th>Actions</th></tr></thead>
+          <tbody id="adm-abo-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- MODAUX ADMIN -->
+<div id="admin-modal-overlay" class="admin-modal-overlay hidden">
+
+  <!-- Modal Pharmacie -->
+  <div class="admin-modal hidden" id="adm-modal-pharma">
+    <div class="admin-modal-header">
+      <h3 id="adm-pharma-modal-title">Nouvelle Pharmacie</h3>
+      <button onclick="closeAdminModal()" style="background:none;color:rgba(255,255,255,.6);font-size:20px">×</button>
+    </div>
+    <form id="pharma-form">
+      <input type="hidden" id="pharma-form-id">
+      <div class="admin-form-group">
+        <label>Code pharmacie *</label>
+        <input type="text" id="pharma-code" placeholder="Ex: DAFEANNE" required style="text-transform:uppercase">
+      </div>
+      <div class="admin-form-group">
+        <label>Nom complet</label>
+        <input type="text" id="pharma-nom" placeholder="Ex: Pharmacie Dafeanne">
+      </div>
+      <div class="admin-form-group">
+        <label>Téléphone</label>
+        <input type="text" id="pharma-telephone" placeholder="Ex: +228 90 00 00 00">
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+        <button type="button" class="btn btn-outline" onclick="closeAdminModal()">Annuler</button>
+        <button type="submit" class="btn btn-primary">💾 Enregistrer</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal Abonnement -->
+  <div class="admin-modal hidden" id="adm-modal-abonnement">
+    <div class="admin-modal-header">
+      <h3>Gérer l'Abonnement</h3>
+      <button onclick="closeAdminModal()" style="background:none;color:rgba(255,255,255,.6);font-size:20px">×</button>
+    </div>
+    <form id="abo-form">
+      <input type="hidden" id="abo-pharma-id">
+      <div class="admin-form-group">
+        <label>Statut</label>
+        <select id="abo-statut">
+          <option value="essai">Essai</option>
+          <option value="actif">Actif</option>
+          <option value="expiré">Expiré</option>
+          <option value="suspendu">Suspendu</option>
+        </select>
+      </div>
+      <div class="admin-form-group">
+        <label>Plan</label>
+        <input type="text" id="abo-plan" placeholder="Ex: Plan Standard">
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+        <button type="button" class="btn btn-outline" onclick="closeAdminModal()">Annuler</button>
+        <button type="submit" class="btn btn-primary">💾 Enregistrer</button>
+      </div>
+    </form>
+  </div>
+
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════
      SCRIPTS (ordre important)

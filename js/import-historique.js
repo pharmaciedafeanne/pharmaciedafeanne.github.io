@@ -884,40 +884,70 @@ const HIST_FACTURES = [
 ];
 
 async function importHistoricalData() {
-  if (!confirm('Importer toutes les données historiques Excel dans Firestore ? Cette action ne doit être faite qu\'une seule fois.')) return;
+  if (!confirm('Importer les données historiques Excel ? Si déjà lancé, cela écrasera sans dupliquer.')) return;
+
   const btn = document.getElementById('btn-import-historique');
-  if (btn) { btn.disabled = true; btn.textContent = 'Import en cours…'; }
-  let ok = 0, err = 0;
+  const setStatus = (txt) => { if (btn) btn.textContent = txt; };
+  if (btn) btn.disabled = true;
 
-  // 1. INAM AMU — regrouper par quinzaine (INAM + AMU sur même ligne)
-  const inamByQz = {};
-  HIST_INAM.forEach(r => {
-    const k = r.quinzaine;
-    if (!inamByQz[k]) inamByQz[k] = { periodKey: k, label: k, inamTotal:0, amuTotal:0, inamPaye:0, amuPaye:0, statut:'non payé', date: r.date };
-    inamByQz[k].inamTotal += r.inamTotal;
-    inamByQz[k].amuTotal  += r.amuTotal;
-    inamByQz[k].inamPaye  += r.inamPaye;
-    inamByQz[k].amuPaye   += r.amuPaye;
-    if (r.dateVirement) inamByQz[k].dateVirement = r.dateVirement;
-  });
-  for (const rec of Object.values(inamByQz)) {
-    const rest = (rec.inamTotal + rec.amuTotal) - (rec.inamPaye + rec.amuPaye);
-    rec.statut = rest <= 0 ? 'payé' : (rec.inamPaye + rec.amuPaye > 0) ? 'partiel' : 'non payé';
-    try { await saveSuiviInamAmu(rec); ok++; } catch(e) { err++; console.error('INAM',e); }
+  const pid = getPharmacieId() || 'DAFEANNE';
+  const db  = getDB();
+  const pharmacieRef = db.collection('pharmacies').doc(pid);
+
+  // Écrit en batches de 499 docs max (limite Firestore = 500)
+  async function writeBatch(items, collectionName, buildDoc) {
+    const LIMIT = 499;
+    let total = 0;
+    for (let i = 0; i < items.length; i += LIMIT) {
+      const chunk = items.slice(i, i + LIMIT);
+      const batch = db.batch();
+      chunk.forEach((item, j) => {
+        const docId = 'hist_' + collectionName + '_' + (i + j);
+        const ref = pharmacieRef.collection(collectionName).doc(docId);
+        batch.set(ref, buildDoc(item, docId));
+      });
+      await batch.commit();
+      total += chunk.length;
+      setStatus('Import ' + collectionName + ' : ' + total + '/' + items.length + '…');
+    }
+    return total;
   }
 
-  // 2. CAISSE
-  for (const op of HIST_CAISSE) {
-    try { await saveCaisseOp(op); ok++; } catch(e) { err++; console.error('CAISSE',e); }
-  }
+  try {
+    // 1. INAM AMU — regrouper par quinzaine
+    setStatus('Préparation INAM/AMU…');
+    const inamByQz = {};
+    HIST_INAM.forEach(r => {
+      const k = r.quinzaine;
+      if (!inamByQz[k]) inamByQz[k] = { periodKey: k, label: k, inamTotal:0, amuTotal:0, inamPaye:0, amuPaye:0, date: r.date };
+      inamByQz[k].inamTotal += r.inamTotal;
+      inamByQz[k].amuTotal  += r.amuTotal;
+      inamByQz[k].inamPaye  += r.inamPaye;
+      inamByQz[k].amuPaye   += r.amuPaye;
+      if (r.dateVirement) inamByQz[k].dateVirement = r.dateVirement;
+    });
+    const inamList = Object.values(inamByQz).map(rec => {
+      const rest = (rec.inamTotal + rec.amuTotal) - (rec.inamPaye + rec.amuPaye);
+      rec.statut = rest <= 0 ? 'payé' : (rec.inamPaye + rec.amuPaye > 0) ? 'partiel' : 'non payé';
+      return rec;
+    });
+    const nbInam = await writeBatch(inamList, 'inam_amu', (r, id) => ({ ...r, id }));
 
-  // 3. FOURNISSEURS
-  for (const f of HIST_FACTURES) {
-    try { await saveFacture(f); ok++; } catch(e) { err++; console.error('FRS',e); }
-  }
+    // 2. CAISSE
+    const nbCaisse = await writeBatch(HIST_CAISSE, 'caisse', (r, id) => ({ ...r, id }));
 
-  const msg = 'Import terminé : ' + ok + ' enregistrements importés, ' + err + ' erreur(s).';
-  alert(msg);
-  toast(msg, err > 0 ? 'error' : 'success');
-  if (btn) { btn.disabled = false; btn.textContent = '📥 Importer données Excel'; }
+    // 3. FACTURES
+    const nbFrs = await writeBatch(HIST_FACTURES, 'factures', (r, id) => ({ ...r, id }));
+
+    const total = nbInam + nbCaisse + nbFrs;
+    const msg = 'Import terminé : ' + total + ' enregistrements (' + nbInam + ' INAM, ' + nbCaisse + ' caisse, ' + nbFrs + ' factures)';
+    alert(msg);
+    toast(msg, 'success');
+  } catch(e) {
+    alert('Erreur import : ' + e.message);
+    toast('Erreur : ' + e.message, 'error');
+    console.error(e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Importer données Excel'; }
+  }
 }

@@ -214,7 +214,7 @@ function navigate(view, params = {}) {
   if (el) el.classList.remove('hidden');
 
   const titles = {
-    dashboard:    '📊 Tableau de Bord',
+    dashboard:    '📊 Tableau de Bord Quinzaines INAM AMU',
     quinzaines:   '📋 Gestion des Quinzaines',
     detail:       '🔍 Détail Quinzaine',
     import:       '📥 Import Excel',

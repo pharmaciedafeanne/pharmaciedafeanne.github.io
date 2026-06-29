@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PHARMACIE DAFEANNE — Suivi Facturation</title>
+  <title>SUIVI FACTURE — Pharmacie Dafeanne</title>
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -47,7 +47,7 @@
   <div class="lp-bg">
     <div class="lp-card">
       <div class="lp-logo">💊</div>
-      <div class="lp-title">PHARMA DAFEANNE</div>
+      <div class="lp-title">SUIVI FACTURE</div>
       <div class="lp-subtitle">SYSTÈME DE GESTION PHARMACEUTIQUE</div>
       <div class="lp-clock" id="lp-clock">00:00:00</div>
       <div class="lp-date" id="lp-date"></div>
@@ -86,17 +86,17 @@
   <aside class="sidebar">
     <div class="sidebar-brand">
       <div class="brand-icon">💊</div>
-      <div class="brand-text"><h2>PHARMACIE DAFEANNE</h2><span>Suivi Facturation</span></div>
+      <div class="brand-text"><h2>SUIVI FACTURE</h2><span>Pharmacie Dafeanne</span></div>
     </div>
 
     <nav class="sidebar-nav">
       <div class="nav-section-label">Principal</div>
-      <div class="nav-item" data-view="dashboard"  onclick="navigate('dashboard')"><span class="icon">📊</span> Tableau de bord</div>
+      <div class="nav-item" data-view="dashboard"  onclick="navigate('dashboard')"><span class="icon">📊</span> Tableau de bord Quinzaines INAM AMU</div>
       <div class="nav-item" data-view="quinzaines" onclick="navigate('quinzaines')"><span class="icon">📋</span> Quinzaines</div>
       <div class="nav-item" data-view="nouvelle"   onclick="navigate('nouvelle')"><span class="icon">➕</span> Nouvelle saisie</div>
 
-      <div class="nav-section-label">Finances</div>
-      <div class="nav-item" data-view="inam-amu"   onclick="navigate('inam-amu')"><span class="icon">🏥</span> Suivi INAM/AMU</div>
+      <div class="nav-section-label">Factures</div>
+      <div class="nav-item" data-view="inam-amu"   onclick="navigate('inam-amu')"><span class="icon">🏥</span> Paiements INAM AMU</div>
       <div class="nav-item" data-view="caisse"     onclick="navigate('caisse')"><span class="icon">💰</span> Petite Caisse</div>
       <div class="nav-item" data-view="fournisseurs" onclick="navigate('fournisseurs')"><span class="icon">🏪</span> Fournisseurs</div>
 
@@ -315,6 +315,24 @@
 
       <!-- ── IMPORT EXCEL ───────────────────────────────── -->
       <div id="view-import" class="hidden">
+
+        <!-- Import données historiques Excel (une seule fois) -->
+        <div class="card" style="margin-bottom:16px;border:2px solid var(--warning)">
+          <div class="card-header">
+            <span class="card-title">🗂️ Import données historiques Excel</span>
+          </div>
+          <div style="padding:14px 16px">
+            <p style="margin:0 0 10px;color:var(--text-muted);font-size:13px">
+              Importe dans Firestore toutes les données du fichier Excel : <strong>50 paiements INAM/AMU</strong>,
+              <strong>427 opérations caisse</strong> et <strong>396 factures fournisseurs</strong>.<br>
+              ⚠️ À n'effectuer <strong>qu'une seule fois</strong>. Si les données existent déjà, des doublons seront créés.
+            </p>
+            <button class="btn btn-primary" id="btn-import-historique" onclick="importHistoricalData()">
+              📥 Importer données Excel (INAM/AMU + Caisse + Fournisseurs)
+            </button>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header"><span class="card-title">Importer un fichier Excel</span></div>
           <div class="alert alert-info">
@@ -890,6 +908,7 @@
 <script src="js/import.js"></script>
 <script src="js/export.js"></script>
 <script src="js/app.js"></script>
+<script src="js/import-historique.js"></script>
 
 </body>
 </html>

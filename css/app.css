@@ -304,6 +304,87 @@ td.amount.depot-sub    { background: rgba(0,150,199,.05); }
 .empty-state h3 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
 .empty-state p  { font-size: 13px; }
 
+/* ===== SUPER ADMIN DARK THEME ===== */
+#admin-app {
+  display: flex; min-height: 100vh;
+  background: #0a0e1a; color: #e0e6f0; font-family: 'Segoe UI', system-ui, sans-serif;
+}
+.admin-sidebar {
+  width: 220px; background: #0d1224; border-right: 1px solid rgba(0,180,216,.15);
+  display: flex; flex-direction: column; position: fixed; inset: 0 auto 0 0; z-index: 100;
+}
+.admin-brand {
+  display: flex; align-items: center; gap: 10px; padding: 20px 16px;
+  border-bottom: 1px solid rgba(0,180,216,.12);
+}
+.admin-brand-icon { font-size: 26px; }
+.admin-brand-title { font-size: 12px; font-weight: 800; color: #00b4d8; letter-spacing: .5px; }
+.admin-brand-sub   { font-size: 10px; color: rgba(255,255,255,.3); }
+.admin-nav { flex: 1; padding: 16px 0; }
+.admin-nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 11px 18px;
+  color: rgba(255,255,255,.45); cursor: pointer; font-size: 13px;
+  border-left: 3px solid transparent; transition: all .15s;
+}
+.admin-nav-item:hover { background: rgba(0,180,216,.07); color: #00b4d8; }
+.admin-nav-item.active { background: rgba(0,180,216,.12); color: #00b4d8; border-left-color: #00b4d8; }
+.admin-sidebar-footer { padding: 14px 16px; border-top: 1px solid rgba(0,180,216,.12); }
+.admin-user-info { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.admin-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,#0096c7,#00b4d8); display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px; }
+.admin-user-name { font-size: 12px; font-weight: 700; color: white; }
+.admin-user-role  { font-size: 10px; color: rgba(255,255,255,.35); }
+.admin-btn-logout { width: 100%; padding: 7px; background: rgba(231,76,60,.15); border: 1px solid rgba(231,76,60,.3); color: #e74c3c; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all .2s; }
+.admin-btn-logout:hover { background: rgba(231,76,60,.25); }
+
+.admin-content { margin-left: 220px; flex: 1; padding: 24px 28px; min-height: 100vh; background: #0a0e1a; }
+.admin-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.admin-page-title { font-size: 18px; font-weight: 700; color: white; }
+.btn-admin-primary { padding: 9px 18px; background: linear-gradient(135deg,#0096c7,#00b4d8); color: white; border-radius: 7px; font-weight: 600; font-size: 13px; cursor: pointer; border: none; }
+.btn-admin-primary:hover { opacity: .88; }
+
+.admin-stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 24px; }
+.admin-stat-card { background: #141929; border: 1px solid rgba(0,180,216,.15); border-radius: 10px; padding: 18px 20px; }
+.asc-val   { font-size: 28px; font-weight: 800; color: #00b4d8; line-height: 1; }
+.asc-label { font-size: 12px; color: rgba(255,255,255,.4); margin-top: 4px; }
+
+.admin-section-title { font-size: 12px; font-weight: 700; color: #00b4d8; letter-spacing: 1px; margin-bottom: 14px; }
+
+.admin-pharma-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.admin-pharma-card { background: #141929; border: 1px solid rgba(0,180,216,.15); border-radius: 10px; padding: 18px; }
+.apc-code   { font-size: 10px; color: #00b4d8; font-weight: 700; letter-spacing: 1px; }
+.apc-name   { font-size: 15px; font-weight: 700; color: white; margin: 4px 0 8px; }
+.apc-info   { font-size: 12px; color: rgba(255,255,255,.4); margin-bottom: 8px; }
+.apc-status { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; margin-bottom: 14px; }
+.apc-actions { display: flex; gap: 8px; }
+.btn-admin-access { flex: 1; padding: 8px; background: #00b4d8; color: white; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
+.btn-admin-access:hover { background: #0096c7; }
+.btn-admin-edit { padding: 8px 12px; background: rgba(255,255,255,.07); color: rgba(255,255,255,.7); border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid rgba(255,255,255,.1); }
+
+.admin-card { background: #141929; border: 1px solid rgba(0,180,216,.12); border-radius: 10px; overflow: hidden; }
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table thead { background: rgba(0,180,216,.08); }
+.admin-table th { padding: 12px 14px; text-align: left; font-size: 11px; font-weight: 700; color: rgba(255,255,255,.4); text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid rgba(0,180,216,.12); }
+.admin-table td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,.04); color: rgba(255,255,255,.75); }
+.admin-table tr:hover td { background: rgba(0,180,216,.04); }
+
+.badge-statut { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.statut-actif    { background: rgba(0,184,148,.15); color: #00b894; }
+.statut-essai    { background: rgba(253,203,110,.15); color: #fdcb6e; }
+.statut-expiré   { background: rgba(225,112,85,.15);  color: #e17055; }
+.statut-suspendu { background: rgba(99,110,114,.15);  color: #636e72; }
+
+.admin-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 999; }
+.admin-modal { background: #141929; border: 1px solid rgba(0,180,216,.2); border-radius: 12px; padding: 28px; width: 420px; max-width: 95vw; }
+.admin-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.admin-modal-header h3 { color: white; font-size: 16px; font-weight: 700; }
+.admin-form-group { margin-bottom: 14px; }
+.admin-form-group label { display: block; font-size: 11px; font-weight: 700; color: rgba(255,255,255,.4); text-transform: uppercase; margin-bottom: 5px; }
+.admin-form-group input,
+.admin-form-group select { width: 100%; padding: 10px 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(0,180,216,.2); border-radius: 7px; color: white; outline: none; font-size: 13px; }
+.admin-form-group input:focus,
+.admin-form-group select:focus { border-color: #00b4d8; }
+.admin-form-group select option { background: #141929; }
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1200px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }

@@ -255,7 +255,7 @@ async function renderQuinzaines() {
     tbody.innerHTML = periods.map(p => `
       <tr>
         <td><strong>${MOIS_APP[p.month]} ${p.year}</strong></td>
-        <td><span class="badge badge-${p.quinzaine==='Q1'?'q1':'q2'}">${p.quinzaine==='Q1'?'1ère Q.':'2ème Q.'}</span></td>
+        <td><span class="badge badge-${p.quinzaine==='Q1'?'q1':'q2'}">${p.quinzaine==='Q1'?'1ère Q.':'2ème Q.'}</span>${p.bis?'<span class="badge" style="background:#f39c12;color:white;margin-left:4px">BIS</span>':''}</td>
         <td>${(p.lots||[]).length}</td>
         <td class="amount dafeanne">${fmtA(p.totaux&&p.totaux.dafeanne&&p.totaux.dafeanne.inam)}</td>
         <td class="amount dafeanne">${fmtA(p.totaux&&p.totaux.dafeanne&&p.totaux.dafeanne.amu)}</td>
@@ -617,17 +617,18 @@ function removeLot(num) {
 }
 
 async function saveNouvelle() {
-  const year     = parseInt(document.getElementById('new-year').value);
-  const month    = parseInt(document.getElementById('new-month').value);
+  const year      = parseInt(document.getElementById('new-year').value);
+  const month     = parseInt(document.getElementById('new-month').value);
   const quinzaine = document.getElementById('new-quinzaine').value;
+  const bis       = document.getElementById('new-bis').checked;
   if (!year || !month || !quinzaine) { toast('Remplissez tous les champs','error'); return; }
 
-  const existing = await getPeriod(year, month, quinzaine);
-  if (existing && !confirm(`Une quinzaine ${quinzaine} pour ${MOIS_APP[month]} ${year} existe déjà. Écraser ?`)) return;
+  const existing = await getPeriod(year, month, quinzaine, bis);
+  if (existing && !confirm(`Cette quinzaine existe déjà. Écraser ?`)) return;
 
   try {
-    await savePeriod({ year, month, quinzaine, lots: _lots });
-    toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} enregistrée ✓`, 'success');
+    await savePeriod({ year, month, quinzaine, bis, lots: _lots });
+    toast(`Quinzaine ${quinzaine}${bis?' BIS':''} ${MOIS_APP[month]} ${year} enregistrée ✓`, 'success');
     navigate('quinzaines');
   } catch(e) { toast('Erreur sauvegarde: '+e.message,'error'); }
 }
@@ -881,7 +882,7 @@ function fmtA(v) {
   return n === 0 ? '—' : n.toLocaleString('fr-FR') + ' F';
 }
 function periodLbl(p) {
-  return `${p.quinzaine==='Q1'?'1ère':'2ème'} Quinzaine — ${MOIS_APP[p.month]} ${p.year}`;
+  return `${p.quinzaine==='Q1'?'1ère':'2ème'} Quinzaine${p.bis?' BIS':''} — ${MOIS_APP[p.month]} ${p.year}`;
 }
 function esc(str) {
   return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

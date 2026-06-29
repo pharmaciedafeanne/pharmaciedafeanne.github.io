@@ -128,6 +128,7 @@ function showMainApp(user) {
     document.getElementById('app').classList.remove('hidden');
     renderSidebar(user);
     navigate('dashboard');
+    setTimeout(() => logAction('Connexion', user.role, user.name||''), 1000);
     setTimeout(check72hNotifications, 2000);
   }
 }
@@ -171,6 +172,12 @@ function renderSidebar(user) {
   const navUsers = document.getElementById('nav-users');
   if (navUsers) navUsers.style.display = isTitulaire ? 'flex' : 'none';
 
+  // Catalogue fournisseurs + Journal : titulaire et superadmin uniquement
+  const navCatFrs = document.getElementById('nav-catalogue-frs');
+  if (navCatFrs) navCatFrs.style.display = (isTitulaire || isSuperAdmin) ? 'flex' : 'none';
+  const navJournal = document.getElementById('nav-journal');
+  if (navJournal) navJournal.style.display = (isTitulaire || isSuperAdmin) ? 'flex' : 'none';
+
   // Bouton retour admin (si superadmin navigue dans une pharmacie)
   const navBack = document.getElementById('nav-back-admin');
   if (navBack) navBack.style.display = isSuperAdmin ? 'flex' : 'none';
@@ -186,7 +193,7 @@ function navigate(view, params = {}) {
   if (params.key) appState.detailKey = params.key;
   setActiveNav(view);
 
-  ['dashboard','quinzaines','detail','import','nouvelle','users','inam-amu','caisse','fournisseurs','donnees'].forEach(v => {
+  ['dashboard','quinzaines','detail','import','nouvelle','users','inam-amu','caisse','fournisseurs','catalogue-frs','journal','donnees'].forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.classList.add('hidden');
   });
@@ -202,22 +209,26 @@ function navigate(view, params = {}) {
     users:        '👥 Mon Équipe — Opérateurs',
     'inam-amu':   '🏥 Suivi Paiements INAM / AMU',
     caisse:       '💰 Petite Caisse',
-    fournisseurs: '🏭 Suivi Fournisseurs',
-    donnees:      '📊 Section Données — Exports'
+    fournisseurs:    '🏭 Suivi Fournisseurs',
+    'catalogue-frs': '📋 Catalogue Fournisseurs',
+    journal:         '📒 Journal de Bord',
+    donnees:         '📊 Section Données — Exports'
   };
   document.getElementById('content-title').textContent = titles[view] || '';
 
   ({
-    dashboard:    renderDashboard,
-    quinzaines:   renderQuinzaines,
-    detail:       () => renderDetail(appState.detailKey),
-    import:       renderImportView,
-    nouvelle:     renderNouvelle,
-    users:        renderUsers,
-    'inam-amu':   renderInamAmu,
-    caisse:       renderCaisse,
-    fournisseurs: renderFournisseurs,
-    donnees:      renderDonnees
+    dashboard:       renderDashboard,
+    quinzaines:      renderQuinzaines,
+    detail:          () => renderDetail(appState.detailKey),
+    import:          renderImportView,
+    nouvelle:        renderNouvelle,
+    users:           renderUsers,
+    'inam-amu':      renderInamAmu,
+    caisse:          renderCaisse,
+    fournisseurs:    renderFournisseurs,
+    'catalogue-frs': renderCatalogueFrs,
+    journal:         renderJournal,
+    donnees:         renderDonnees
   }[view] || (() => {}))();
 }
 
@@ -1010,6 +1021,120 @@ async function doDeleteUser(uid, name) {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  CATALOGUE FOURNISSEURS
+// ══════════════════════════════════════════════════════════════
+
+async function renderCatalogueFrs() {
+  const tbody = document.getElementById('cat-frs-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px">Chargement…</td></tr>';
+  try {
+    const list = await getAllCatalogueFrs();
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;opacity:.5">Aucun fournisseur. Ajoutez-en un.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map(f => `<tr>
+      <td><strong>${esc(f.nom||'—')}</strong></td>
+      <td>${esc(f.telephone||'—')}</td>
+      <td>${esc(f.adresse||'—')}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openEditCatFrs('${f.id}','${esc(f.nom||'')}','${esc(f.telephone||'')}','${esc(f.adresse||'')}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="doDeleteCatFrs('${f.id}','${esc(f.nom||'')}')">🗑️</button>
+      </td>
+    </tr>`).join('');
+    // Mise à jour du datalist global
+    await refreshFrsDatalist();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+function openAddCatFrs() {
+  document.getElementById('cat-frs-id').value      = '';
+  document.getElementById('cat-frs-nom').value     = '';
+  document.getElementById('cat-frs-tel').value     = '';
+  document.getElementById('cat-frs-adresse').value = '';
+  document.getElementById('modal-cat-frs-title').textContent = '🏭 Nouveau Fournisseur';
+  openModal('modal-cat-frs');
+}
+
+function openEditCatFrs(id, nom, tel, adresse) {
+  document.getElementById('cat-frs-id').value      = id;
+  document.getElementById('cat-frs-nom').value     = nom;
+  document.getElementById('cat-frs-tel').value     = tel;
+  document.getElementById('cat-frs-adresse').value = adresse;
+  document.getElementById('modal-cat-frs-title').textContent = '✏️ Modifier Fournisseur';
+  openModal('modal-cat-frs');
+}
+
+async function saveCatFrs() {
+  const id      = document.getElementById('cat-frs-id').value;
+  const nom     = document.getElementById('cat-frs-nom').value.trim();
+  const telephone = document.getElementById('cat-frs-tel').value.trim();
+  const adresse = document.getElementById('cat-frs-adresse').value.trim();
+  if (!nom) return toast('Le nom est obligatoire','error');
+  try {
+    await saveCatalogueFrs({ id: id||undefined, nom, telephone, adresse });
+    closeModal();
+    toast(id ? 'Fournisseur modifié ✓' : 'Fournisseur ajouté ✓','success');
+    renderCatalogueFrs();
+    logAction(id ? 'Modif fournisseur catalogue' : 'Ajout fournisseur catalogue', nom, currentUser?.name||'');
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function doDeleteCatFrs(id, nom) {
+  if (!confirm(`Supprimer "${nom}" du catalogue ?`)) return;
+  try {
+    await deleteCatalogueFrs(id);
+    toast('Fournisseur supprimé','success');
+    logAction('Suppression fournisseur catalogue', nom, currentUser?.name||'');
+    renderCatalogueFrs();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function refreshFrsDatalist() {
+  try {
+    const list = await getAllCatalogueFrs();
+    const html = list.map(f => `<option value="${esc(f.nom)}"></option>`).join('');
+    document.querySelectorAll('datalist[id="frs-list"]').forEach(dl => dl.innerHTML = html);
+  } catch(e) { /* silencieux */ }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  JOURNAL DE BORD
+// ══════════════════════════════════════════════════════════════
+
+async function renderJournal() {
+  const tbody = document.getElementById('journal-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px">Chargement…</td></tr>';
+  try {
+    const entries = await getJournalEntries(300);
+    if (!entries.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;opacity:.5">Aucune entrée dans le journal.</td></tr>';
+      return;
+    }
+    const icons = {
+      'Connexion': '🔑', 'Déconnexion': '🔒', 'Clôture quinzaine': '✅',
+      'Réouverture quinzaine': '🔓', 'Nouvelle quinzaine': '➕',
+      'Ajout facture': '🏭', 'Modif facture': '✏️', 'Suppression facture': '🗑️',
+      'Paiement facture': '💳', 'Recharge caisse': '💰', 'Dépense caisse': '💸',
+      'Ajout fournisseur catalogue': '🏭', 'Modif fournisseur catalogue': '✏️',
+      'Suppression fournisseur catalogue': '🗑️'
+    };
+    tbody.innerHTML = entries.map(e => {
+      const icon = icons[e.action] || '📝';
+      return `<tr>
+        <td>${esc(e.date||'—')}</td>
+        <td>${esc(e.heure||'—')}</td>
+        <td>${esc(e.userName||'—')}</td>
+        <td><span style="display:flex;align-items:center;gap:6px">${icon} <strong>${esc(e.action||'—')}</strong></span></td>
+        <td style="opacity:.8">${esc(e.details||'')}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) { toast('Erreur journal: '+e.message,'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════
 //  EXPORTS
 // ══════════════════════════════════════════════════════════════
 
@@ -1497,6 +1622,7 @@ async function doCloturerQuinzaine(key) {
   try {
     await getQuinzaineDocRef(key).update({ cloturee: true, clotureeAt: firebase.firestore.FieldValue.serverTimestamp() });
     toast('Quinzaine clôturée ✓', 'success');
+    logAction('Clôture quinzaine', key, currentUser?.name||'');
     renderDetail(key);
   } catch(e) { toast('Erreur: '+e.message, 'error'); }
 }
@@ -1506,6 +1632,7 @@ async function doRouvrirQuinzaine(key) {
   try {
     await getQuinzaineDocRef(key).update({ cloturee: false });
     toast('Quinzaine rouverte ✓', 'success');
+    logAction('Réouverture quinzaine', key, currentUser?.name||'');
     renderDetail(key);
   } catch(e) { toast('Erreur: '+e.message, 'error'); }
 }
@@ -1779,6 +1906,7 @@ async function saveRecharge() {
     else    { await saveCaisseOp(data); }
     closeModal();
     toast(id ? 'Recharge modifiée ✓' : 'Recharge enregistrée ✓','success');
+    logAction('Recharge caisse', `${montant} F`, currentUser?.name||'');
     renderCaisse();
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
@@ -1805,6 +1933,7 @@ async function saveDepense() {
     await saveCaisseOp({ type: 'depense', date, montant, fournisseur, libelle, note });
     closeModal();
     toast('Dépense enregistrée ✓','success');
+    logAction('Dépense caisse', `${libelle} — ${montant} F`, currentUser?.name||'');
     renderCaisse();
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }
@@ -1991,6 +2120,7 @@ function openNewFacture() {
   const alerteJoursEl = document.getElementById('facture-alerte-jours');
   if (alerteJoursEl) alerteJoursEl.value = 7;
   document.getElementById('modal-facture-title').textContent = 'Nouvelle Facture';
+  refreshFrsDatalist();
   openModal('modal-facture');
 }
 
@@ -2013,6 +2143,7 @@ async function openEditFacture(id) {
   const alerteJoursEl = document.getElementById('facture-alerte-jours');
   if (alerteJoursEl) alerteJoursEl.value = f.alerteJours || 7;
   document.getElementById('modal-facture-title').textContent = 'Modifier Facture';
+  refreshFrsDatalist();
   openModal('modal-facture');
 }
 
@@ -2035,6 +2166,7 @@ async function saveFactureForm() {
     await saveFacture({ id: id||undefined, fournisseur, dateFacture, echeance, montant, designation, statut, note, mode, ref, prospective, alerteJours, montantPaye: existing ? (existing.montantPaye||0) : 0 });
     closeModal();
     toast('Facture enregistrée ✓','success');
+    logAction(id ? 'Modif facture' : 'Ajout facture', `${fournisseur} — ${montant} F`, currentUser?.name||'');
     renderFournisseurs();
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }

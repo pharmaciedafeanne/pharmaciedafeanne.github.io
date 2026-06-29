@@ -372,71 +372,100 @@ async function renderDetail(key) {
 
   lotsEl.innerHTML = period.lots.map(lot => {
     const lt = lot.totaux || {}; const ld = lt.dafeanne||{}; const lp = lt.depot||{};
+    const entite = lot.entite || null; // null = ancien format multi-entités
+    const dfVal = entite ? (ld[entite.toLowerCase()]||0) : ((ld.inam||0)+(ld.amu||0));
+    const dpVal = entite ? (lp[entite.toLowerCase()]||0) : ((lp.inam||0)+(lp.amu||0));
+    const lotTotal = dfVal + dpVal;
+    const entiteBadge = entite
+      ? `<span class="badge badge-${entite==='INAM'?'q1':'q2'}" style="margin-left:8px">${entite}</span>` : '';
+
+    const bonRows = (lot.bons||[]).map(bon => {
+      if (entite) {
+        const e = entite.toLowerCase();
+        const dfB = (bon.dafeanne&&bon.dafeanne[e])||0;
+        const dpB = (bon.depot&&bon.depot[e])||0;
+        return `<tr>
+          <td><strong>${esc(bon.label||'BON N°'+bon.numero)}</strong></td>
+          <td class="amount dafeanne">${fmtA(dfB)}</td>
+          <td class="amount depot">${fmtA(dpB)}</td>
+          <td class="amount total">${fmtA(dfB+dpB)}</td>
+          <td class="remark-cell" title="${esc(bon.remarque||'')}">${esc(bon.remarque||'—')}</td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-outline btn-sm btn-icon" onclick="openEditBon('${key}',${lot.numero},'${bon.id}')" title="Modifier">✏️</button>
+            <button class="btn btn-danger btn-sm btn-icon" onclick="deleteExistingBon('${key}',${lot.numero},'${bon.id}')" title="Supprimer">×</button>
+          </td>
+        </tr>`;
+      }
+      // Ancien format : 4 colonnes INAM/AMU
+      const di=(bon.dafeanne&&bon.dafeanne.inam)||0, da=(bon.dafeanne&&bon.dafeanne.amu)||0;
+      const pi=(bon.depot&&bon.depot.inam)||0,       pa=(bon.depot&&bon.depot.amu)||0;
+      return `<tr>
+        <td><strong>${esc(bon.label||'BON N°'+bon.numero)}</strong></td>
+        <td class="amount dafeanne">${fmtA(di)}</td><td class="amount dafeanne">${fmtA(da)}</td>
+        <td class="amount depot">${fmtA(pi)}</td><td class="amount depot">${fmtA(pa)}</td>
+        <td class="amount total">${fmtA(di+da+pi+pa)}</td>
+        <td class="remark-cell">${esc(bon.remarque||'—')}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-outline btn-sm btn-icon" onclick="openEditBon('${key}',${lot.numero},'${bon.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteExistingBon('${key}',${lot.numero},'${bon.id}')">×</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const thead = entite
+      ? `<tr>
+          <th>BON</th>
+          <th class="th-dafeanne">💊 DAFEANNE ${entite} (F)</th>
+          <th class="th-depot">🏪 DÉPÔT ${entite} (F)</th>
+          <th>TOTAL BON</th><th>OBSERVATION</th><th></th>
+         </tr>`
+      : `<tr>
+          <th rowspan="2">BON</th>
+          <th colspan="2" class="th-dafeanne">💊 DAFEANNE</th>
+          <th colspan="2" class="th-depot">🏪 DÉPÔT</th>
+          <th rowspan="2">TOTAL</th><th rowspan="2">OBS.</th><th rowspan="2"></th>
+         </tr>
+         <tr>
+          <th class="th-dafeanne">INAM</th><th class="th-dafeanne">AMU</th>
+          <th class="th-depot">INAM</th><th class="th-depot">AMU</th>
+         </tr>`;
+
+    const tfootRow = entite
+      ? `<tr class="lot-total-row">
+          <td><strong>TOTAL LOT ${lot.numero}</strong></td>
+          <td class="amount dafeanne"><strong>${fmtA(dfVal)}</strong></td>
+          <td class="amount depot"><strong>${fmtA(dpVal)}</strong></td>
+          <td class="amount total"><strong>${fmtA(lotTotal)}</strong></td>
+          <td></td><td></td>
+         </tr>`
+      : `<tr class="lot-total-row">
+          <td><strong>TOTAL LOT ${lot.numero}</strong></td>
+          <td class="amount dafeanne"><strong>${fmtA(ld.inam)}</strong></td>
+          <td class="amount dafeanne"><strong>${fmtA(ld.amu)}</strong></td>
+          <td class="amount depot"><strong>${fmtA(lp.inam)}</strong></td>
+          <td class="amount depot"><strong>${fmtA(lp.amu)}</strong></td>
+          <td class="amount total"><strong>${fmtA(lotTotal)}</strong></td>
+          <td></td><td></td>
+         </tr>`;
+
     return `
     <div class="lot-card">
       <div class="lot-header" onclick="toggleLot(${lot.numero})">
-        <h4>LOT N°${lot.numero} <span style="font-weight:400;font-size:12px;opacity:.7">(${(lot.bons||[]).length} bons)</span></h4>
+        <h4>LOT N°${lot.numero}${entiteBadge} <span style="font-weight:400;font-size:12px;opacity:.7">(${(lot.bons||[]).length} bons)</span></h4>
         <div class="lot-totals">
-          <span class="lt-item dafeanne">💊 INAM ${fmtA(ld.inam)} · AMU ${fmtA(ld.amu)}</span>
+          <span class="lt-item dafeanne">💊 ${fmtA(dfVal)}</span>
           <span class="lt-sep">|</span>
-          <span class="lt-item depot">🏪 INAM ${fmtA(lp.inam)} · AMU ${fmtA(lp.amu)}</span>
+          <span class="lt-item depot">🏪 ${fmtA(dpVal)}</span>
           <span class="lt-sep">→</span>
-          <span class="lt-total">${fmtA((ld.inam||0)+(ld.amu||0)+(lp.inam||0)+(lp.amu||0))}</span>
+          <span class="lt-total">${fmtA(lotTotal)}</span>
         </div>
         <span class="lot-toggle" id="toggle-${lot.numero}">▼</span>
       </div>
       <div class="lot-body" id="lot-body-${lot.numero}">
         <table class="bons-table">
-          <thead>
-            <tr>
-              <th rowspan="2">BON</th>
-              <th colspan="2" class="th-dafeanne">💊 DAFEANNE</th>
-              <th class="th-dafeanne-tot">TOTAL DAFEANNE</th>
-              <th colspan="2" class="th-depot">🏪 DÉPÔT</th>
-              <th class="th-depot-tot">TOTAL DÉPÔT</th>
-              <th rowspan="2">TOTAL BON</th>
-              <th rowspan="2">OBSERVATION</th>
-              <th rowspan="2"></th>
-            </tr>
-            <tr>
-              <th class="th-dafeanne">INAM</th><th class="th-dafeanne">AMU</th>
-              <th class="th-dafeanne-tot"></th>
-              <th class="th-depot">INAM</th><th class="th-depot">AMU</th>
-              <th class="th-depot-tot"></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(lot.bons||[]).map(bon => {
-              const di=(bon.dafeanne&&bon.dafeanne.inam)||0, da=(bon.dafeanne&&bon.dafeanne.amu)||0;
-              const pi=(bon.depot&&bon.depot.inam)||0,       pa=(bon.depot&&bon.depot.amu)||0;
-              return `<tr>
-                <td><strong>${esc(bon.label||'BON N°'+bon.numero)}</strong></td>
-                <td class="amount dafeanne">${fmtA(di)}</td>
-                <td class="amount dafeanne">${fmtA(da)}</td>
-                <td class="amount dafeanne-sub">${fmtA(di+da)}</td>
-                <td class="amount depot">${fmtA(pi)}</td>
-                <td class="amount depot">${fmtA(pa)}</td>
-                <td class="amount depot-sub">${fmtA(pi+pa)}</td>
-                <td class="amount total">${fmtA(di+da+pi+pa)}</td>
-                <td class="remark-cell" title="${esc(bon.remarque||'')}">${esc(bon.remarque||'—')}</td>
-                <td style="white-space:nowrap">
-                  <button class="btn btn-outline btn-sm btn-icon" onclick="openEditBon('${key}',${lot.numero},'${bon.id}')" title="Modifier">✏️</button>
-                  <button class="btn btn-danger btn-sm btn-icon" onclick="deleteExistingBon('${key}',${lot.numero},'${bon.id}')" title="Supprimer ce bon">×</button>
-                </td>
-              </tr>`;
-            }).join('')}
-            <tr class="lot-total-row">
-              <td><strong>TOTAL LOT ${lot.numero}</strong></td>
-              <td class="amount dafeanne"><strong>${fmtA(ld.inam)}</strong></td>
-              <td class="amount dafeanne"><strong>${fmtA(ld.amu)}</strong></td>
-              <td class="amount dafeanne-sub"><strong>${fmtA((ld.inam||0)+(ld.amu||0))}</strong></td>
-              <td class="amount depot"><strong>${fmtA(lp.inam)}</strong></td>
-              <td class="amount depot"><strong>${fmtA(lp.amu)}</strong></td>
-              <td class="amount depot-sub"><strong>${fmtA((lp.inam||0)+(lp.amu||0))}</strong></td>
-              <td class="amount total"><strong>${fmtA((ld.inam||0)+(ld.amu||0)+(lp.inam||0)+(lp.amu||0))}</strong></td>
-              <td></td><td></td>
-            </tr>
-          </tbody>
+          <thead>${thead}</thead>
+          <tbody>${bonRows}</tbody>
+          <tfoot>${tfootRow}</tfoot>
         </table>
         <div style="padding:10px 16px;border-top:1px dashed var(--border)">
           <button class="btn btn-outline btn-sm" onclick="addBonToExisting('${key}',${lot.numero})">
@@ -511,22 +540,52 @@ async function openEditBon(periodKey, lotNum, bonId) {
   const bon = lot && (lot.bons||[]).find(b => String(b.id) === String(bonId));
   if (!bon) return;
 
-  document.getElementById('eb-label').textContent = bon.label || `BON N°${bon.numero} — LOT N°${lotNum}`;
-  document.getElementById('eb-df-inam').value = (bon.dafeanne&&bon.dafeanne.inam)||0;
-  document.getElementById('eb-df-amu').value  = (bon.dafeanne&&bon.dafeanne.amu) ||0;
-  document.getElementById('eb-dp-inam').value = (bon.depot&&bon.depot.inam)      ||0;
-  document.getElementById('eb-dp-amu').value  = (bon.depot&&bon.depot.amu)       ||0;
+  const entite = lot.entite || null;
+  const e = entite ? entite.toLowerCase() : null;
+
+  document.getElementById('eb-label').textContent = `${bon.label||'BON N°'+bon.numero} — LOT N°${lotNum}${entite?' ('+entite+')':''}`;
+
+  // Adapter les labels et champs selon entité
+  const rowDfInam = document.getElementById('eb-row-df-inam');
+  const rowDfAmu  = document.getElementById('eb-row-df-amu');
+  const rowDpInam = document.getElementById('eb-row-dp-inam');
+  const rowDpAmu  = document.getElementById('eb-row-dp-amu');
+  const rowDfSimple = document.getElementById('eb-row-df-simple');
+  const rowDpSimple = document.getElementById('eb-row-dp-simple');
+
+  if (entite) {
+    // Mode entité unique : afficher 2 champs simples
+    if (rowDfInam)  rowDfInam.style.display  = 'none';
+    if (rowDfAmu)   rowDfAmu.style.display   = 'none';
+    if (rowDpInam)  rowDpInam.style.display  = 'none';
+    if (rowDpAmu)   rowDpAmu.style.display   = 'none';
+    if (rowDfSimple) { rowDfSimple.style.display=''; rowDfSimple.querySelector('label').textContent=`DAFEANNE ${entite} (F)`; }
+    if (rowDpSimple) { rowDpSimple.style.display=''; rowDpSimple.querySelector('label').textContent=`DÉPÔT ${entite} (F)`; }
+    document.getElementById('eb-df-simple').value = (bon.dafeanne&&bon.dafeanne[e])||0;
+    document.getElementById('eb-dp-simple').value = (bon.depot&&bon.depot[e])||0;
+  } else {
+    // Ancien format : 4 champs
+    if (rowDfInam)  rowDfInam.style.display  = '';
+    if (rowDfAmu)   rowDfAmu.style.display   = '';
+    if (rowDpInam)  rowDpInam.style.display  = '';
+    if (rowDpAmu)   rowDpAmu.style.display   = '';
+    if (rowDfSimple) rowDfSimple.style.display = 'none';
+    if (rowDpSimple) rowDpSimple.style.display = 'none';
+    document.getElementById('eb-df-inam').value = (bon.dafeanne&&bon.dafeanne.inam)||0;
+    document.getElementById('eb-df-amu').value  = (bon.dafeanne&&bon.dafeanne.amu) ||0;
+    document.getElementById('eb-dp-inam').value = (bon.depot&&bon.depot.inam)      ||0;
+    document.getElementById('eb-dp-amu').value  = (bon.depot&&bon.depot.amu)       ||0;
+  }
   document.getElementById('eb-remarque').value = bon.remarque||'';
 
   document.getElementById('btn-eb-save').onclick = async () => {
-    bon.dafeanne = {
-      inam: parseFloat(document.getElementById('eb-df-inam').value)||0,
-      amu:  parseFloat(document.getElementById('eb-df-amu').value) ||0
-    };
-    bon.depot = {
-      inam: parseFloat(document.getElementById('eb-dp-inam').value)||0,
-      amu:  parseFloat(document.getElementById('eb-dp-amu').value) ||0
-    };
+    if (entite) {
+      bon.dafeanne = { inam: 0, amu: 0, [e]: parseFloat(document.getElementById('eb-df-simple').value)||0 };
+      bon.depot    = { inam: 0, amu: 0, [e]: parseFloat(document.getElementById('eb-dp-simple').value)||0 };
+    } else {
+      bon.dafeanne = { inam: parseFloat(document.getElementById('eb-df-inam').value)||0, amu: parseFloat(document.getElementById('eb-df-amu').value)||0 };
+      bon.depot    = { inam: parseFloat(document.getElementById('eb-dp-inam').value)||0, amu: parseFloat(document.getElementById('eb-dp-amu').value)||0 };
+    }
     bon.remarque = document.getElementById('eb-remarque').value.trim();
     try {
       await savePeriod({ ...period });
@@ -552,15 +611,21 @@ function renderNouvelle() {
 
 function addLot() {
   const n = _lots.length + 1;
-  _lots.push({ numero: n, bons: [] });
+  _lots.push({ numero: n, entite: null, bons: [] });
   renderLotsBuilder();
-  // Ajouter automatiquement un premier bon
-  addBon(n);
+}
+
+function setLotEntite(lotNum, entite) {
+  const lot = _lots.find(l => l.numero === lotNum);
+  if (!lot) return;
+  lot.entite = entite;
+  renderLotsBuilder();
+  addBon(lotNum); // premier bon automatique
 }
 
 function addBon(lotNum) {
   const lot = _lots.find(l => l.numero === lotNum);
-  if (!lot) return;
+  if (!lot || !lot.entite) return;
   const bonNum = lot.bons.length + 1;
   const bon = {
     id: `bon_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
@@ -572,14 +637,11 @@ function addBon(lotNum) {
   };
   lot.bons.push(bon);
 
-  // Insertion directe dans le DOM sans re-rendre tout le tableau
   const tbody = document.getElementById(`bon-rows-${lotNum}`);
   if (tbody) {
-    tbody.insertAdjacentHTML('beforeend', bonRow(lotNum, bon));
-    // Mettre à jour le compteur dans le header
+    tbody.insertAdjacentHTML('beforeend', bonRow(lotNum, bon, lot.entite));
     const header = tbody.closest('.lot-card').querySelector('.lot-header h4');
-    if (header) header.innerHTML = `LOT N°${lot.numero} <span style="font-weight:400;font-size:12px;opacity:.7">(${lot.bons.length} bon${lot.bons.length > 1 ? 's' : ''})</span>`;
-    // Focus sur le premier input du nouveau bon
+    if (header) header.innerHTML = lotHeaderLabel(lot);
     tbody.lastElementChild.querySelector('input[type="number"]')?.focus();
   } else {
     renderLotsBuilder();
@@ -604,6 +666,16 @@ function removeBon(lotNum, bonId) {
   updateLotSubtotal(lotNum);
 }
 
+function lotHeaderLabel(lot) {
+  const badge = lot.entite
+    ? `<span class="badge badge-${lot.entite==='INAM'?'q1':'q2'}" style="margin-left:8px">${lot.entite}</span>`
+    : '';
+  const count = lot.bons.length
+    ? `<span style="font-weight:400;font-size:12px;opacity:.7;margin-left:6px">(${lot.bons.length} bon${lot.bons.length>1?'s':''})</span>`
+    : '';
+  return `LOT N°${lot.numero}${badge}${count}`;
+}
+
 function renderLotsBuilder() {
   const c = document.getElementById('lots-builder');
   if (!_lots.length) {
@@ -612,63 +684,76 @@ function renderLotsBuilder() {
       <p>Cliquez sur "Ajouter un lot" pour commencer la saisie.</p></div>`;
     return;
   }
-  c.innerHTML = _lots.map(lot => `
+  c.innerHTML = _lots.map(lot => {
+    if (!lot.entite) {
+      // Sélection de l'entité obligatoire avant de saisir
+      return `
+      <div class="lot-card" style="margin-bottom:14px">
+        <div class="lot-header" style="cursor:default;justify-content:space-between">
+          <h4>${lotHeaderLabel(lot)}</h4>
+          <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer</button>
+        </div>
+        <div class="lot-body open" style="padding:24px;text-align:center">
+          <p style="margin-bottom:14px;color:var(--text-muted);font-size:14px">
+            Choisissez l'entité de ce lot (figée pour tous les bons) :
+          </p>
+          <div style="display:flex;gap:16px;justify-content:center">
+            <button class="btn btn-primary" style="min-width:120px;font-size:15px" onclick="setLotEntite(${lot.numero},'INAM')">🏥 INAM</button>
+            <button class="btn btn-success" style="min-width:120px;font-size:15px" onclick="setLotEntite(${lot.numero},'AMU')">💊 AMU</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    const e = lot.entite;
+    return `
     <div class="lot-card" style="margin-bottom:14px">
       <div class="lot-header" style="cursor:default;justify-content:space-between">
-        <h4>LOT N°${lot.numero} <span style="font-weight:400;font-size:12px;opacity:.7">(${lot.bons.length} bon${lot.bons.length > 1 ? 's' : ''})</span></h4>
+        <h4>${lotHeaderLabel(lot)}</h4>
         <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer le lot</button>
       </div>
       <div class="lot-body open">
         <table class="bons-table">
           <thead>
             <tr>
-              <th rowspan="2" style="width:110px">BON</th>
-              <th colspan="2" class="th-dafeanne">💊 DAFEANNE</th>
-              <th colspan="2" class="th-depot">🏪 DÉPÔT</th>
-              <th rowspan="2">OBSERVATION</th>
-              <th rowspan="2" style="width:36px"></th>
-            </tr>
-            <tr>
-              <th class="th-dafeanne">INAM (F)</th><th class="th-dafeanne">AMU (F)</th>
-              <th class="th-depot">INAM (F)</th><th class="th-depot">AMU (F)</th>
+              <th style="width:110px">BON</th>
+              <th class="th-dafeanne">💊 DAFEANNE ${e} (F)</th>
+              <th class="th-depot">🏪 DÉPÔT ${e} (F)</th>
+              <th>OBSERVATION</th>
+              <th style="width:36px"></th>
             </tr>
           </thead>
           <tbody id="bon-rows-${lot.numero}">
-            ${lot.bons.map(bon => bonRow(lot.numero, bon)).join('')}
+            ${lot.bons.map(bon => bonRow(lot.numero, bon, e)).join('')}
           </tbody>
           <tfoot>
             <tr class="lot-total-row">
-              <td><strong>SOUS-TOTAL LOT ${lot.numero}</strong></td>
-              <td class="amount th-dafeanne" id="st-${lot.numero}-df-inam">0</td>
-              <td class="amount th-dafeanne" id="st-${lot.numero}-df-amu">0</td>
-              <td class="amount th-depot"    id="st-${lot.numero}-dp-inam">0</td>
-              <td class="amount th-depot"    id="st-${lot.numero}-dp-amu">0</td>
-              <td class="amount" colspan="2">
-                <span style="font-size:11px;color:var(--text-muted)">
-                  💊 <strong id="st-${lot.numero}-df-total">0</strong> F &nbsp;|&nbsp;
-                  🏪 <strong id="st-${lot.numero}-dp-total">0</strong> F &nbsp;|&nbsp;
-                </span>
-                <strong id="st-${lot.numero}-total" style="color:var(--primary)">0</strong> F
-              </td>
+              <td><strong>SOUS-TOTAL LOT ${lot.numero} — ${e}</strong></td>
+              <td class="amount th-dafeanne" id="st-${lot.numero}-df">0</td>
+              <td class="amount th-depot"    id="st-${lot.numero}-dp">0</td>
+              <td class="amount" colspan="2">Total : <strong id="st-${lot.numero}-total" style="color:var(--primary)">0</strong> F</td>
             </tr>
           </tfoot>
         </table>
         <div style="padding:10px 12px;border-top:1px dashed var(--border)">
-          <button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">
-            ➕ Ajouter un bon
-          </button>
+          <button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ Ajouter un bon</button>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+
+  // Calculer les sous-totaux pour les lots déjà remplis
+  _lots.forEach(lot => { if (lot.entite) updateLotSubtotal(lot.numero); });
 }
 
-function bonRow(lotNum, bon) {
+function bonRow(lotNum, bon, entite) {
+  const e = (entite || 'inam').toLowerCase();
+  const dfVal = (bon.dafeanne && bon.dafeanne[e]) || 0;
+  const dpVal = (bon.depot    && bon.depot[e])    || 0;
   return `<tr id="row-${bon.id}">
     <td><strong>${bon.label}</strong></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="dafeanne" data-field="inam" value="${bon.dafeanne.inam}" oninput="updateCell(this)"></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="dafeanne" data-field="amu"  value="${bon.dafeanne.amu}"  oninput="updateCell(this)"></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="depot"    data-field="inam" value="${bon.depot.inam}"    oninput="updateCell(this)"></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="depot"    data-field="amu"  value="${bon.depot.amu}"     oninput="updateCell(this)"></td>
+    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="dafeanne" data-field="${e}" value="${dfVal}" oninput="updateCell(this)"></td>
+    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="depot"    data-field="${e}" value="${dpVal}" oninput="updateCell(this)"></td>
     <td><input type="text" class="cell-input cell-remark" data-lot="${lotNum}" data-bon="${bon.id}" data-account="remarque" data-field="remarque" value="${esc(bon.remarque)}" oninput="updateCell(this)" placeholder="Observation…"></td>
     <td><button class="btn btn-danger btn-sm btn-icon" onclick="removeBon(${lotNum},'${bon.id}')" title="Supprimer ce bon">×</button></td>
   </tr>`;
@@ -687,28 +772,22 @@ function updateCell(input) {
 
 function updateLotSubtotal(lotNum) {
   const lot = _lots.find(l => l.numero === lotNum);
-  if (!lot) return;
-  let dfInam=0, dfAmu=0, dpInam=0, dpAmu=0;
+  if (!lot || !lot.entite) return;
+  const e = lot.entite.toLowerCase();
+  let dfVal=0, dpVal=0;
   lot.bons.forEach(b => {
-    dfInam += b.dafeanne.inam || 0;
-    dfAmu  += b.dafeanne.amu  || 0;
-    dpInam += b.depot.inam    || 0;
-    dpAmu  += b.depot.amu     || 0;
+    dfVal += (b.dafeanne && b.dafeanne[e]) || 0;
+    dpVal += (b.depot    && b.depot[e])    || 0;
   });
-  const dfTotal = dfInam + dfAmu;
-  const dpTotal = dpInam + dpAmu;
-  const total   = dfTotal + dpTotal;
+  const total = dfVal + dpVal;
   const s = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = fmtA(val); };
-  s(`st-${lotNum}-df-inam`,  dfInam);
-  s(`st-${lotNum}-df-amu`,   dfAmu);
-  s(`st-${lotNum}-dp-inam`,  dpInam);
-  s(`st-${lotNum}-dp-amu`,   dpAmu);
-  s(`st-${lotNum}-df-total`, dfTotal);
-  s(`st-${lotNum}-dp-total`, dpTotal);
-  s(`st-${lotNum}-total`,    total);
+  s(`st-${lotNum}-df`,    dfVal);
+  s(`st-${lotNum}-dp`,    dpVal);
+  s(`st-${lotNum}-total`, total);
 }
 
 function removeLot(num) {
+  if (!confirm(`Supprimer le LOT N°${num} et tous ses bons ?`)) return;
   _lots = _lots.filter(l => l.numero !== num);
   _lots.forEach((l, i) => l.numero = i + 1);
   renderLotsBuilder();

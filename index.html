@@ -570,18 +570,30 @@
       <button class="btn-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
+      <!-- Mode entité unique (INAM ou AMU) -->
+      <div class="form-row cols-2" id="eb-row-df-simple" style="display:none">
+        <div class="field"><label id="eb-lbl-df-simple">DAFEANNE (F)</label><input type="number" min="0" id="eb-df-simple"></div>
+      </div>
+      <div class="form-row cols-2" id="eb-row-dp-simple" style="display:none">
+        <div class="field"><label id="eb-lbl-dp-simple">DÉPÔT (F)</label><input type="number" min="0" id="eb-dp-simple"></div>
+      </div>
+      <!-- Mode ancien format (INAM + AMU sur même ligne) -->
       <div class="accounts-form-grid">
         <div class="af-section dafeanne-section">
           <div class="af-title">💊 DAFEANNE</div>
-          <div class="form-row cols-2">
+          <div class="form-row cols-2" id="eb-row-df-inam">
             <div class="field"><label>INAM (F)</label><input type="number" min="0" id="eb-df-inam"></div>
+          </div>
+          <div class="form-row cols-2" id="eb-row-df-amu">
             <div class="field"><label>AMU (F)</label><input type="number" min="0" id="eb-df-amu"></div>
           </div>
         </div>
         <div class="af-section depot-section">
           <div class="af-title">🏪 DÉPÔT</div>
-          <div class="form-row cols-2">
+          <div class="form-row cols-2" id="eb-row-dp-inam">
             <div class="field"><label>INAM (F)</label><input type="number" min="0" id="eb-dp-inam"></div>
+          </div>
+          <div class="form-row cols-2" id="eb-row-dp-amu">
             <div class="field"><label>AMU (F)</label><input type="number" min="0" id="eb-dp-amu"></div>
           </div>
         </div>

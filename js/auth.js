@@ -38,9 +38,7 @@ function onAuthReady(callback) {
 
 // ── Gestion des comptes (Super Admin) ────────────────────────────────
 
-async function createAccount(name, email, password, role) {
-  // Crée le compte Firebase Auth via une instance secondaire
-  // → évite de déconnecter l'administrateur courant
+async function createAccount(name, email, password, role, pharmacieId) {
   const secondary = firebase.initializeApp(FIREBASE_CONFIG, 'secondary_' + Date.now());
   let uid;
   try {
@@ -50,8 +48,7 @@ async function createAccount(name, email, password, role) {
   } finally {
     await secondary.delete();
   }
-  // Enregistre le profil dans Firestore
-  await createUserProfile(uid, { name, email, role });
+  await createUserProfile(uid, { name, email, role, pharmacieId: pharmacieId || null });
   return uid;
 }
 

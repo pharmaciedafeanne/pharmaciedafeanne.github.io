@@ -46,8 +46,8 @@ function recalcPeriod(period) {
   return period;
 }
 
-function periodKey(year, month, quinzaine) {
-  return `${year}-${String(month).padStart(2,'0')}-${quinzaine}`;
+function periodKey(year, month, quinzaine, bis) {
+  return `${year}-${String(month).padStart(2,'0')}-${quinzaine}${bis ? '-BIS' : ''}`;
 }
 
 // ── Référence sous-collection quinzaines ─────────────────────────────

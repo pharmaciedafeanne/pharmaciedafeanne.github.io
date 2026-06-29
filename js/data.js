@@ -1,9 +1,13 @@
-// ===== DATA LAYER — Firestore =====
-// Modèle : chaque bon porte { dafeanne: {inam, amu}, depot: {inam, amu} }
-// DAFEANNE et DÉPÔT = deux comptes de facturation distincts
-// Facture finale quinzaine = (DAFEANNE_INAM + DÉPÔT_INAM) + (DAFEANNE_AMU + DÉPÔT_AMU)
+// ===== DATA LAYER — Firestore Multi-Pharmacie =====
+// Structure : pharmacies/{pharmacieId}/quinzaines/{key}
+// Chaque bon porte { dafeanne: {inam, amu}, depot: {inam, amu} }
 
-const COLLECTIONS = { QUINZAINES: 'quinzaines', USERS: 'users' };
+const COLLECTIONS = { USERS: 'users', PHARMACIES: 'pharmacies' };
+
+// Contexte pharmacie courant (défini par app.js)
+let _currentPharmacieId = null;
+function setPharmacieContext(id) { _currentPharmacieId = id; }
+function getPharmacieId() { return _currentPharmacieId; }
 
 // ── Calculs ──────────────────────────────────────────────────────────
 
@@ -46,6 +50,76 @@ function periodKey(year, month, quinzaine) {
   return `${year}-${String(month).padStart(2,'0')}-${quinzaine}`;
 }
 
+// ── Référence sous-collection quinzaines ─────────────────────────────
+
+function quinzainesRef(pharmacieId) {
+  const pid = pharmacieId || _currentPharmacieId;
+  return getDB().collection(COLLECTIONS.PHARMACIES).doc(pid).collection('quinzaines');
+}
+
+function getQuinzaineDocRef(key, pharmacieId) {
+  return quinzainesRef(pharmacieId).doc(key);
+}
+
+// ── Pharmacies ───────────────────────────────────────────────────────
+
+async function createPharmacie(data) {
+  const code = data.code.toUpperCase().replace(/\s+/g,'');
+  await getDB().collection(COLLECTIONS.PHARMACIES).doc(code).set({
+    code,
+    nom:       data.nom || '',
+    adresse:   data.adresse || '',
+    telephone: data.telephone || '',
+    abonnement: { statut: 'essai', plan: null, dateDebut: null, dateFin: null },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  return code;
+}
+
+async function getAllPharmacies() {
+  const snap = await getDB().collection(COLLECTIONS.PHARMACIES).get();
+  const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  list.sort((a, b) => {
+    const ta = a.createdAt ? a.createdAt.seconds : 0;
+    const tb = b.createdAt ? b.createdAt.seconds : 0;
+    return tb - ta;
+  });
+  return list;
+}
+
+async function getPharmacie(id) {
+  const doc = await getDB().collection(COLLECTIONS.PHARMACIES).doc(id).get();
+  return doc.exists ? { id: doc.id, ...doc.data() } : null;
+}
+
+async function updatePharmacie(id, data) {
+  await getDB().collection(COLLECTIONS.PHARMACIES).doc(id).update(data);
+}
+
+async function deletePharmacie(id) {
+  await getDB().collection(COLLECTIONS.PHARMACIES).doc(id).delete();
+}
+
+// ── Migration : root quinzaines → pharmacies/DAFEANNE/quinzaines ─────
+
+async function migrateRootQuinzaines() {
+  const rootSnap = await getDB().collection('quinzaines').get();
+  if (rootSnap.empty) return 0;
+  const subSnap = await quinzainesRef('DAFEANNE').limit(1).get();
+  if (!subSnap.empty) return 0; // déjà migré
+
+  const batchSize = 400;
+  const docs = rootSnap.docs;
+  for (let i = 0; i < docs.length; i += batchSize) {
+    const batch = getDB().batch();
+    docs.slice(i, i + batchSize).forEach(doc => {
+      batch.set(quinzainesRef('DAFEANNE').doc(doc.id), doc.data(), { merge: true });
+    });
+    await batch.commit();
+  }
+  return docs.length;
+}
+
 // ── Quinzaines ───────────────────────────────────────────────────────
 
 async function savePeriod(period) {
@@ -53,24 +127,24 @@ async function savePeriod(period) {
   const key = periodKey(period.year, period.month, period.quinzaine);
   period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (!period.createdAt) period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-  await getDB().collection(COLLECTIONS.QUINZAINES).doc(key).set(period, { merge: true });
+  await quinzainesRef().doc(key).set(period, { merge: true });
   return { key, ...period };
 }
 
 async function getPeriod(year, month, quinzaine) {
-  const doc = await getDB().collection(COLLECTIONS.QUINZAINES)
-    .doc(periodKey(year, month, quinzaine)).get();
+  const doc = await quinzainesRef().doc(periodKey(year, month, quinzaine)).get();
   return doc.exists ? { key: doc.id, ...doc.data() } : null;
 }
 
 async function getAllPeriods() {
-  const snap = await getDB().collection(COLLECTIONS.QUINZAINES)
-    .orderBy('year', 'desc').orderBy('month', 'desc').orderBy('quinzaine', 'asc').get();
-  return snap.docs.map(d => ({ key: d.id, ...d.data() }));
+  const snap = await quinzainesRef().get();
+  return snap.docs
+    .map(d => ({ key: d.id, ...d.data() }))
+    .sort((a, b) => b.year - a.year || b.month - a.month || a.quinzaine.localeCompare(b.quinzaine));
 }
 
 async function deletePeriod(key) {
-  await getDB().collection(COLLECTIONS.QUINZAINES).doc(key).delete();
+  await quinzainesRef().doc(key).delete();
 }
 
 async function getGlobalStats() {
@@ -117,8 +191,19 @@ async function getMonthlyStats() {
 // ── Utilisateurs ─────────────────────────────────────────────────────
 
 async function getAllUsers() {
+  const snap = await getDB().collection(COLLECTIONS.USERS).get();
+  return snap.docs
+    .map(d => ({ uid: d.id, ...d.data() }))
+    .sort((a, b) => {
+      const ta = a.createdAt ? a.createdAt.seconds : 0;
+      const tb = b.createdAt ? b.createdAt.seconds : 0;
+      return tb - ta;
+    });
+}
+
+async function getUsersByPharmacie(pharmacieId) {
   const snap = await getDB().collection(COLLECTIONS.USERS)
-    .orderBy('createdAt', 'desc').get();
+    .where('pharmacieId', '==', pharmacieId).get();
   return snap.docs.map(d => ({ uid: d.id, ...d.data() }));
 }
 

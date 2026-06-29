@@ -124,7 +124,7 @@ async function migrateRootQuinzaines() {
 
 async function savePeriod(period) {
   period = recalcPeriod(period);
-  const key = periodKey(period.year, period.month, period.quinzaine);
+  const key = periodKey(period.year, period.month, period.quinzaine, period.bis);
   period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (!period.createdAt) period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
   await quinzainesRef().doc(key).set(period, { merge: true });

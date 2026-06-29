@@ -149,13 +149,27 @@ function renderSidebar(user) {
   const isTitulaire  = u.role === 'titulaire';
   const isOperateur  = u.role === 'operateur';
 
-  // Imports : masqué pour opérateur
-  const navImport = document.getElementById('nav-import');
-  if (navImport) navImport.style.display = isOperateur ? 'none' : 'flex';
+  const perms = u.permissions || {};
 
-  // Administration : titulaire peut gérer ses opérateurs, superadmin non (a son propre dashboard)
+  // Imports : masqué pour opérateur sans permission
+  const navImport = document.getElementById('nav-import');
+  if (navImport) navImport.style.display = (isOperateur && !perms.import) ? 'none' : 'flex';
+
+  // INAM/AMU : masqué pour opérateur sans permission
+  const navInam = document.getElementById('nav-inam-amu');
+  if (navInam) navInam.style.display = (isOperateur && !perms.inam) ? 'none' : 'flex';
+
+  // Caisse : masqué pour opérateur sans permission caisse ni recharge
+  const navCaisse = document.getElementById('nav-caisse');
+  if (navCaisse) navCaisse.style.display = (isOperateur && !perms.caisse && !perms.recharge) ? 'none' : 'flex';
+
+  // Fournisseurs : masqué pour opérateur sans permission
+  const navFourn = document.getElementById('nav-fournisseurs');
+  if (navFourn) navFourn.style.display = (isOperateur && !perms.fournisseurs) ? 'none' : 'flex';
+
+  // Équipe : titulaire peut gérer ses opérateurs
   const navUsers = document.getElementById('nav-users');
-  if (navUsers) navUsers.style.display = (isTitulaire) ? 'flex' : 'none';
+  if (navUsers) navUsers.style.display = isTitulaire ? 'flex' : 'none';
 
   // Bouton retour admin (si superadmin navigue dans une pharmacie)
   const navBack = document.getElementById('nav-back-admin');
@@ -185,7 +199,7 @@ function navigate(view, params = {}) {
     detail:       '🔍 Détail Quinzaine',
     import:       '📥 Import Excel',
     nouvelle:     '➕ Nouvelle Quinzaine',
-    users:        '👥 Gestion des Utilisateurs',
+    users:        '👥 Mon Équipe — Opérateurs',
     'inam-amu':   '🏥 Suivi Paiements INAM / AMU',
     caisse:       '💰 Petite Caisse',
     fournisseurs: '🏭 Suivi Fournisseurs'
@@ -780,29 +794,35 @@ document.addEventListener('DOMContentLoaded', () => {
 // ══════════════════════════════════════════════════════════════
 
 function openAddUser() {
-  document.getElementById('modal-user-title').textContent = 'Nouvel utilisateur';
+  document.getElementById('modal-user-title').textContent = 'Nouvel opérateur';
   document.getElementById('user-form').reset();
   document.getElementById('user-uid').value = '';
   document.getElementById('user-password-row').style.display = 'block';
+  // Titulaire ne peut créer que des opérateurs
+  const roleSelect = document.getElementById('user-role');
+  roleSelect.innerHTML = '<option value="operateur">Opérateur</option>';
   document.getElementById('btn-save-user').onclick = doSaveUser;
   openModal('modal-user');
 }
 
 async function openEditUser(uid) {
-  const users = await getAllUsers();
+  const users = currentUser.role === 'titulaire'
+    ? await getUsersByPharmacie(currentUser.pharmacieId)
+    : await getAllUsers();
   const u = users.find(x => x.uid === uid);
   if (!u) return;
-  document.getElementById('modal-user-title').textContent = 'Modifier utilisateur';
+  document.getElementById('modal-user-title').textContent = 'Modifier opérateur';
   document.getElementById('user-uid').value   = uid;
   document.getElementById('user-name').value  = u.name;
   document.getElementById('user-email').value = u.email;
-  document.getElementById('user-role').value  = u.role;
+  const roleSelect = document.getElementById('user-role');
+  roleSelect.innerHTML = '<option value="operateur">Opérateur</option>';
+  roleSelect.value = 'operateur';
   document.getElementById('user-password').value = '';
   document.getElementById('user-password').placeholder = 'Laisser vide = inchangé';
   document.getElementById('user-password-row').style.display = 'block';
-  // Charger les permissions
   const perms = u.permissions || {};
-  ['cloturer','rouvrir','fournisseurs','recharge','import'].forEach(p => {
+  ['cloturer','rouvrir','inam','caisse','recharge','fournisseurs','import'].forEach(p => {
     const el = document.getElementById(`perm-${p}`);
     if (el) el.checked = !!perms[p];
   });
@@ -816,25 +836,26 @@ async function doSaveUser() {
   const email    = document.getElementById('user-email').value.trim();
   const role     = document.getElementById('user-role').value;
   const password = document.getElementById('user-password').value;
-  if (!name || !email || !role) { toast('Remplissez tous les champs obligatoires','error'); return; }
+  if (!name || !email) { toast('Remplissez tous les champs obligatoires','error'); return; }
 
   const btn = document.getElementById('btn-save-user');
   btn.disabled = true; btn.textContent = 'Enregistrement…';
   const permissions = {};
-  ['cloturer','rouvrir','fournisseurs','recharge','import'].forEach(p => {
+  ['cloturer','rouvrir','inam','caisse','recharge','fournisseurs','import'].forEach(p => {
     const el = document.getElementById(`perm-${p}`);
     if (el) permissions[p] = el.checked;
   });
 
   try {
     if (uid) {
-      await updateAccount(uid, { name, role, permissions });
-      toast('Utilisateur modifié ✓','success');
+      await updateAccount(uid, { name, role: 'operateur', permissions });
+      toast('Opérateur modifié ✓','success');
     } else {
       if (!password) { toast('Le mot de passe est obligatoire','error'); btn.disabled=false; btn.textContent='💾 Enregistrer'; return; }
-      const pharmacieId = currentUser.role === 'titulaire' ? currentUser.pharmacieId : (_currentPharmacieId || null);
-      await createAccount(name, email, password, role, pharmacieId);
-      toast('Utilisateur créé ✓','success');
+      const pharmacieId = currentUser.pharmacieId || _currentPharmacieId || null;
+      const newUid = await createAccount(name, email, password, 'operateur', pharmacieId);
+      await updateUserProfile(newUid, { permissions });
+      toast('Opérateur créé ✓','success');
     }
     closeModal();
     renderUsers();
@@ -967,7 +988,7 @@ async function showAdminDashboard() {
 }
 
 function adminNavigate(view) {
-  ['admin-overview','admin-pharmacies','admin-abonnements'].forEach(v => {
+  ['admin-overview','admin-pharmacies','admin-utilisateurs','admin-abonnements'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.classList.add('hidden');
   });
@@ -976,9 +997,129 @@ function adminNavigate(view) {
   const el = document.getElementById(view);
   if (el) el.classList.remove('hidden');
 
-  if (view === 'admin-overview')     renderAdminOverview();
-  if (view === 'admin-pharmacies')   renderAdminPharmacies();
-  if (view === 'admin-abonnements')  renderAdminAbonnements();
+  if (view === 'admin-overview')       renderAdminOverview();
+  if (view === 'admin-pharmacies')     renderAdminPharmacies();
+  if (view === 'admin-utilisateurs')   renderAdminUsers();
+  if (view === 'admin-abonnements')    renderAdminAbonnements();
+}
+
+// ── Gestion utilisateurs (superadmin) ────────────────────────
+
+async function renderAdminUsers() {
+  const tbody = document.getElementById('adm-users-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;opacity:.5">Chargement…</td></tr>';
+  try {
+    const [users, pharmacies] = await Promise.all([getAllUsers(), getAllPharmacies()]);
+    const phMap = {};
+    pharmacies.forEach(p => phMap[p.id] = p.nom || p.code);
+    const roleLabel = { superadmin: 'Super Admin', titulaire: 'Titulaire', operateur: 'Opérateur' };
+    tbody.innerHTML = users.map(u => `<tr>
+      <td><strong>${esc(u.name)}</strong></td>
+      <td>${esc(u.email)}</td>
+      <td><span class="badge badge-${u.role==='superadmin'?'superadmin':u.role==='titulaire'?'titulaire':'user'}">${roleLabel[u.role]||u.role}</span></td>
+      <td>${u.pharmacieId ? esc(phMap[u.pharmacieId]||u.pharmacieId) : '—'}</td>
+      <td>${u.createdAt ? new Date(u.createdAt.seconds*1000).toLocaleDateString('fr-FR') : '—'}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="openAdminEditUser('${u.uid}')">✏️ Modifier</button>
+          ${u.uid !== currentUser.uid ? `<button class="btn btn-danger btn-sm" onclick="doAdminDeleteUser('${u.uid}','${esc(u.name)}')">🗑️</button>` : ''}
+        </div>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:30px;opacity:.5">Aucun utilisateur</td></tr>';
+  } catch(e) { console.error(e); }
+}
+
+async function openAdminAddUser() {
+  document.getElementById('adm-user-modal-title').textContent = 'Nouvel utilisateur';
+  document.getElementById('adm-user-uid').value = '';
+  document.getElementById('adm-user-form').reset();
+  document.getElementById('adm-user-password-row').style.display = 'block';
+  // Remplir la liste des pharmacies
+  const pharmacies = await getAllPharmacies();
+  const sel = document.getElementById('adm-user-pharmacie');
+  sel.innerHTML = pharmacies.map(p => `<option value="${p.id}">${esc(p.nom||p.code)}</option>`).join('');
+  document.getElementById('adm-user-role').value = 'titulaire';
+  onAdmUserRoleChange();
+  openAdminModal('adm-modal-user');
+}
+
+async function openAdminEditUser(uid) {
+  const users = await getAllUsers();
+  const u = users.find(x => x.uid === uid);
+  if (!u) return;
+  document.getElementById('adm-user-modal-title').textContent = 'Modifier utilisateur';
+  document.getElementById('adm-user-uid').value    = uid;
+  document.getElementById('adm-user-name').value  = u.name;
+  document.getElementById('adm-user-email').value = u.email;
+  document.getElementById('adm-user-password').value = '';
+  document.getElementById('adm-user-password').placeholder = 'Laisser vide = inchangé';
+  document.getElementById('adm-user-password-row').style.display = 'block';
+  const pharmacies = await getAllPharmacies();
+  const sel = document.getElementById('adm-user-pharmacie');
+  sel.innerHTML = pharmacies.map(p => `<option value="${p.id}" ${p.id===u.pharmacieId?'selected':''}>${esc(p.nom||p.code)}</option>`).join('');
+  document.getElementById('adm-user-role').value = u.role;
+  onAdmUserRoleChange();
+  const perms = u.permissions || {};
+  ['cloturer','rouvrir','inam','caisse','recharge','fournisseurs','import'].forEach(p => {
+    const el = document.getElementById(`adm-perm-${p}`);
+    if (el) el.checked = !!perms[p];
+  });
+  openAdminModal('adm-modal-user');
+}
+
+function onAdmUserRoleChange() {
+  const role = document.getElementById('adm-user-role').value;
+  document.getElementById('adm-user-perms-row').style.display = role === 'operateur' ? 'block' : 'none';
+}
+
+async function doSaveAdminUser() {
+  const uid      = document.getElementById('adm-user-uid').value;
+  const name     = document.getElementById('adm-user-name').value.trim();
+  const email    = document.getElementById('adm-user-email').value.trim();
+  const password = document.getElementById('adm-user-password').value;
+  const role     = document.getElementById('adm-user-role').value;
+  const pharmacieId = document.getElementById('adm-user-pharmacie').value;
+  if (!name || !email || !role || !pharmacieId) { toast('Remplissez tous les champs','error'); return; }
+  const btn = document.getElementById('adm-btn-save-user');
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
+  const permissions = {};
+  if (role === 'operateur') {
+    ['cloturer','rouvrir','inam','caisse','recharge','fournisseurs','import'].forEach(p => {
+      const el = document.getElementById(`adm-perm-${p}`);
+      if (el) permissions[p] = el.checked;
+    });
+  }
+  try {
+    if (uid) {
+      await updateAccount(uid, { name, role, pharmacieId, permissions });
+      toast('Utilisateur modifié ✓','success');
+    } else {
+      if (!password) { toast('Le mot de passe est obligatoire','error'); btn.disabled=false; btn.textContent='💾 Enregistrer'; return; }
+      await createAccount(name, email, password, role, pharmacieId);
+      // Sauvegarder les permissions si opérateur
+      if (role === 'operateur') {
+        const allUsers = await getAllUsers();
+        const newUser = allUsers.find(u => u.email === email);
+        if (newUser) await updateAccount(newUser.uid, { permissions });
+      }
+      toast('Utilisateur créé ✓','success');
+    }
+    closeAdminModal();
+    renderAdminUsers();
+    renderAdminOverview();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+  finally { btn.disabled=false; btn.textContent='💾 Enregistrer'; }
+}
+
+async function doAdminDeleteUser(uid, name) {
+  if (!confirm(`Supprimer l'utilisateur "${name}" ?`)) return;
+  try {
+    await deleteAccount(uid);
+    toast('Utilisateur supprimé','success');
+    renderAdminUsers();
+    renderAdminOverview();
+  } catch(e) { toast(e.message,'error'); }
 }
 
 async function renderAdminOverview() {

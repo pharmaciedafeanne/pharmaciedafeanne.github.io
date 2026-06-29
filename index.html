@@ -68,9 +68,9 @@
       <div class="nav-item" data-view="nouvelle"   onclick="navigate('nouvelle')"><span class="icon">➕</span> Nouvelle saisie</div>
 
       <div class="nav-section-label">Factures</div>
-      <div class="nav-item" data-view="inam-amu"   onclick="navigate('inam-amu')"><span class="icon">🏥</span> Paiements INAM AMU</div>
-      <div class="nav-item" data-view="caisse"     onclick="navigate('caisse')"><span class="icon">💰</span> Petite Caisse</div>
-      <div class="nav-item" data-view="fournisseurs" onclick="navigate('fournisseurs')"><span class="icon">🏪</span> Fournisseurs</div>
+      <div class="nav-item" data-view="inam-amu"    id="nav-inam-amu"    onclick="navigate('inam-amu')"><span class="icon">🏥</span> Paiements INAM AMU</div>
+      <div class="nav-item" data-view="caisse"      id="nav-caisse"      onclick="navigate('caisse')"><span class="icon">💰</span> Petite Caisse</div>
+      <div class="nav-item" data-view="fournisseurs" id="nav-fournisseurs" onclick="navigate('fournisseurs')"><span class="icon">🏪</span> Fournisseurs</div>
 
       <div class="nav-section-label" id="nav-section-data">Données</div>
       <div class="nav-item" onclick="exportAllPDF()"><span class="icon">📄</span> Exporter PDF</div>
@@ -78,7 +78,7 @@
 
       <div class="nav-section-label">Administration</div>
       <div class="nav-item" data-view="import" id="nav-import" onclick="navigate('import')"><span class="icon">📥</span> Importer Excel</div>
-      <div class="nav-item" data-view="users" id="nav-users" onclick="navigate('users')"><span class="icon">👥</span> Utilisateurs</div>
+      <div class="nav-item" data-view="users" id="nav-users" onclick="navigate('users')"><span class="icon">👥</span> Mon équipe</div>
       <div class="nav-item" id="nav-back-admin" onclick="backToAdmin()" style="display:none"><span class="icon">⬅️</span> Dashboard Admin</div>
     </nav>
 
@@ -415,8 +415,8 @@
       <div id="view-users" class="hidden">
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Gestion des Utilisateurs</span>
-            <button class="btn btn-primary" onclick="openAddUser()">➕ Nouvel utilisateur</button>
+            <span class="card-title">👥 Mon Équipe — Opérateurs</span>
+            <button class="btn btn-primary" onclick="openAddUser()">➕ Nouvel opérateur</button>
           </div>
           <div class="table-wrapper">
             <table>
@@ -582,8 +582,10 @@
           <div class="perms-grid">
             <label class="perm-check"><input type="checkbox" id="perm-cloturer"> Clôturer quinzaine</label>
             <label class="perm-check"><input type="checkbox" id="perm-rouvrir"> Rouvrir quinzaine</label>
-            <label class="perm-check"><input type="checkbox" id="perm-fournisseurs"> Gérer fournisseurs</label>
+            <label class="perm-check"><input type="checkbox" id="perm-inam"> Gérer INAM/AMU</label>
+            <label class="perm-check"><input type="checkbox" id="perm-caisse"> Gérer caisse (dépenses)</label>
             <label class="perm-check"><input type="checkbox" id="perm-recharge"> Recharger caisse</label>
+            <label class="perm-check"><input type="checkbox" id="perm-fournisseurs"> Gérer fournisseurs</label>
             <label class="perm-check"><input type="checkbox" id="perm-import"> Importer Excel</label>
           </div>
         </div>
@@ -768,6 +770,7 @@
     <nav class="admin-nav">
       <div class="admin-nav-item active" data-view="admin-overview"     onclick="adminNavigate('admin-overview')">    <span>📊</span> Vue d'ensemble</div>
       <div class="admin-nav-item"        data-view="admin-pharmacies"   onclick="adminNavigate('admin-pharmacies')">  <span>🏥</span> Pharmacies</div>
+      <div class="admin-nav-item"        data-view="admin-utilisateurs" onclick="adminNavigate('admin-utilisateurs')"><span>👥</span> Utilisateurs</div>
       <div class="admin-nav-item"        data-view="admin-abonnements"  onclick="adminNavigate('admin-abonnements')"> <span>💳</span> Abonnements</div>
     </nav>
     <div class="admin-sidebar-footer">
@@ -811,6 +814,20 @@
         <table class="admin-table">
           <thead><tr><th>Code</th><th>Nom</th><th>Téléphone</th><th>Utilisateurs</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody id="adm-pharma-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- UTILISATEURS -->
+    <div id="admin-utilisateurs" class="hidden">
+      <div class="admin-topbar">
+        <h2 class="admin-page-title">👥 Gestion des Utilisateurs</h2>
+        <button class="btn-admin-primary" onclick="openAdminAddUser()">➕ Nouvel utilisateur</button>
+      </div>
+      <div class="admin-card">
+        <table class="admin-table">
+          <thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Pharmacie</th><th>Créé le</th><th>Actions</th></tr></thead>
+          <tbody id="adm-users-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -862,6 +879,56 @@
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
         <button type="button" class="btn btn-outline" onclick="closeAdminModal()">Annuler</button>
         <button type="submit" class="btn btn-primary">💾 Enregistrer</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal Utilisateur (superadmin) -->
+  <div class="admin-modal hidden" id="adm-modal-user">
+    <div class="admin-modal-header">
+      <h3 id="adm-user-modal-title">Nouvel utilisateur</h3>
+      <button onclick="closeAdminModal()" style="background:none;color:rgba(255,255,255,.6);font-size:20px">×</button>
+    </div>
+    <form id="adm-user-form" onsubmit="event.preventDefault(); doSaveAdminUser()">
+      <input type="hidden" id="adm-user-uid">
+      <div class="admin-form-group">
+        <label>Nom complet *</label>
+        <input type="text" id="adm-user-name" required>
+      </div>
+      <div class="admin-form-group">
+        <label>Email *</label>
+        <input type="email" id="adm-user-email" autocomplete="off" required>
+      </div>
+      <div class="admin-form-group" id="adm-user-password-row">
+        <label>Mot de passe *</label>
+        <input type="password" id="adm-user-password" autocomplete="new-password">
+      </div>
+      <div class="admin-form-group">
+        <label>Rôle *</label>
+        <select id="adm-user-role" onchange="onAdmUserRoleChange()">
+          <option value="titulaire">Pharmacien Titulaire</option>
+          <option value="operateur">Opérateur</option>
+        </select>
+      </div>
+      <div class="admin-form-group">
+        <label>Pharmacie *</label>
+        <select id="adm-user-pharmacie"></select>
+      </div>
+      <div class="admin-form-group" id="adm-user-perms-row" style="display:none">
+        <label style="margin-bottom:8px">Permissions opérateur</label>
+        <div class="perms-grid" style="background:rgba(255,255,255,.05);padding:12px;border-radius:8px">
+          <label class="perm-check" style="color:rgba(255,255,255,.85)"><input type="checkbox" id="adm-perm-cloturer"> Clôturer quinzaine</label>
+          <label class="perm-check" style="color:rgba(255,255,255,.85)"><input type="checkbox" id="adm-perm-rouvrir"> Rouvrir quinzaine</label>
+          <label class="perm-check" style="color:rgba(255,255,255,.85)"><input type="checkbox" id="adm-perm-inam"> Gérer INAM/AMU</label>
+          <label class="perm-check" style="color:rgba(255,255,255,.85)"><input type="checkbox" id="adm-perm-caisse"> Gérer caisse (dépenses)</label>
+          <label class="perm-check" style="color:rgba(255,255,255,.85)"><input type="checkbox" id="adm-perm-recharge"> Recharger caisse</label>
+          <label class="perm-check" style="color:rgba(255,255,255,.85)"><input type="checkbox" id="adm-perm-fournisseurs"> Gérer fournisseurs</label>
+          <label class="perm-check" style="color:rgba(255,255,255,.85)"><input type="checkbox" id="adm-perm-import"> Importer Excel</label>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+        <button type="button" class="btn btn-outline" onclick="closeAdminModal()">Annuler</button>
+        <button type="submit" class="btn btn-primary" id="adm-btn-save-user">💾 Enregistrer</button>
       </div>
     </form>
   </div>

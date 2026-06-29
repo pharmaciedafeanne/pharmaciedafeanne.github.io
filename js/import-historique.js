@@ -916,7 +916,7 @@ async function importHistoricalData() {
     try { await saveFacture(f); ok++; } catch(e) { err++; console.error('FRS',e); }
   }
 
-  const msg = Import terminé : \ enregistrements importés, \ erreur(s).;
+  const msg = 'Import terminé : ' + ok + ' enregistrements importés, ' + err + ' erreur(s).';
   alert(msg);
   toast(msg, err > 0 ? 'error' : 'success');
   if (btn) { btn.disabled = false; btn.textContent = '📥 Importer données Excel'; }

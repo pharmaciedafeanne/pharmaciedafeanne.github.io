@@ -11,6 +11,17 @@ let _setupDone = false;
 //  INIT
 // ══════════════════════════════════════════════════════════════
 
+async function checkSetupDone() {
+  // Vrai si au moins un superadmin existe dans Firestore
+  try {
+    const snap = await getDB().collection('users').where('role','==','superadmin').limit(1).get();
+    return !snap.empty;
+  } catch(e) {
+    // Pas encore d'accès Firestore (règles ouvertes non encore appliquées)
+    return !!localStorage.getItem('dafeanne_setup_done');
+  }
+}
+
 function initApp() {
   try {
     initFirebase();
@@ -19,11 +30,13 @@ function initApp() {
     return;
   }
 
-  onAuthReady((status, user) => {
+  onAuthReady(async (status, user) => {
     if (status === 'logged_in') {
       showMainApp(user);
     } else {
-      if (localStorage.getItem('dafeanne_setup_done')) {
+      const setupDone = await checkSetupDone();
+      if (setupDone) {
+        localStorage.setItem('dafeanne_setup_done', '1'); // synchroniser le flag local
         showLogin();
       } else {
         showSetup();

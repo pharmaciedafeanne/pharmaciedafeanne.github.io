@@ -157,62 +157,65 @@ async function exportPDF(periods, filename, reportTitle) {
     doc.setTextColor(0,0,0);
     y += 14;
 
-    // ── Tableau détaillé par lot ──
-    y = checkY(y, 30);
-    const head = [['LOT','BON',
-      'DAFEANNE INAM','DAFEANNE AMU','TOTAL DAFEANNE',
-      'DÉPÔT INAM','DÉPÔT AMU','TOTAL DÉPÔT',
-      'TOTAL BON','OBSERVATION']];
+    // ── Tableaux détaillés séparés : INAM puis AMU ──
+    for (const entite of ['INAM', 'AMU']) {
+      const field = entite.toLowerCase();
+      const C_ENT = entite === 'INAM' ? C_DAFEANNE : C_DEPOT;
+      const lotsEntite = (period.lots || []).filter(l => l.entite === entite || !l.entite);
 
-    const body = [];
-    (period.lots || []).forEach(lot => {
-      (lot.bons || []).forEach(bon => {
-        const df_i = (bon.dafeanne && bon.dafeanne.inam) || 0;
-        const df_a = (bon.dafeanne && bon.dafeanne.amu)  || 0;
-        const dp_i = (bon.depot    && bon.depot.inam)    || 0;
-        const dp_a = (bon.depot    && bon.depot.amu)     || 0;
+      if (!lotsEntite.length) continue;
+
+      y = checkY(y, 20);
+      // Titre entité
+      doc.setFillColor(...C_ENT);
+      doc.roundedRect(ML, y, W-ML-MR, 8, 1, 1, 'F');
+      doc.setTextColor(...C_WHITE);
+      doc.setFontSize(9); doc.setFont('helvetica','bold');
+      doc.text(`DÉTAIL ${entite}`, W/2, y+5.5, {align:'center'});
+      doc.setTextColor(0,0,0);
+      y += 10;
+
+      const head = [['LOT','BON',`DAFEANNE ${entite}`,`DÉPÔT ${entite}`,'TOTAL BON','OBSERVATION']];
+      const body = [];
+      lotsEntite.forEach(lot => {
+        (lot.bons || []).forEach(bon => {
+          const df = (bon.dafeanne && bon.dafeanne[field]) || 0;
+          const dp = (bon.depot    && bon.depot[field])    || 0;
+          body.push([
+            `L${lot.numero}`, bon.label || `BON N°${bon.numero}`,
+            fmtF(df), fmtF(dp), fmtF(df+dp),
+            (bon.remarque || '').substring(0, 40)
+          ]);
+        });
+        const lt = lot.totaux || {};
+        const ldi = (lt.dafeanne && lt.dafeanne[field])||0;
+        const lpi = (lt.depot    && lt.depot[field])   ||0;
         body.push([
-          `L${lot.numero}`, bon.label || `BON N°${bon.numero}`,
-          fmtF(df_i), fmtF(df_a), fmtF(df_i + df_a),
-          fmtF(dp_i), fmtF(dp_a), fmtF(dp_i + dp_a),
-          fmtF(df_i + df_a + dp_i + dp_a),
-          (bon.remarque || '').substring(0, 35)
+          { content: `TOTAL LOT ${lot.numero}`, styles:{fontStyle:'bold',fillColor:C_LIGHT,textColor:C_PRIMARY} },
+          { content:'',styles:{fillColor:C_LIGHT} },
+          { content:fmtF(ldi), styles:{fontStyle:'bold',fillColor:C_LIGHT,textColor:C_ENT} },
+          { content:fmtF(lpi), styles:{fontStyle:'bold',fillColor:C_LIGHT,textColor:C_ENT} },
+          { content:fmtF(ldi+lpi), styles:{fontStyle:'bold',fillColor:C_LIGHT,textColor:C_SUCCESS} },
+          { content:'',styles:{fillColor:C_LIGHT} }
         ]);
       });
-      // Ligne total lot
-      const lt = lot.totaux || {};
-      const ltdi = (lt.dafeanne && lt.dafeanne.inam)||0, ltda = (lt.dafeanne && lt.dafeanne.amu)||0;
-      const ltpi = (lt.depot    && lt.depot.inam)   ||0, ltpa = (lt.depot    && lt.depot.amu)  ||0;
-      body.push([
-        { content: `TOTAL LOT ${lot.numero}`, styles:{fontStyle:'bold', fillColor:C_LIGHT, textColor:C_PRIMARY} },
-        { content: '', styles:{fillColor:C_LIGHT} },
-        { content: fmtF(ltdi), styles:{fontStyle:'bold', fillColor:C_LIGHT, textColor:C_DAFEANNE} },
-        { content: fmtF(ltda), styles:{fontStyle:'bold', fillColor:C_LIGHT, textColor:C_DAFEANNE} },
-        { content: fmtF(ltdi+ltda), styles:{fontStyle:'bold', fillColor:C_LIGHT, textColor:C_DAFEANNE} },
-        { content: fmtF(ltpi), styles:{fontStyle:'bold', fillColor:C_LIGHT, textColor:C_DEPOT} },
-        { content: fmtF(ltpa), styles:{fontStyle:'bold', fillColor:C_LIGHT, textColor:C_DEPOT} },
-        { content: fmtF(ltpi+ltpa), styles:{fontStyle:'bold', fillColor:C_LIGHT, textColor:C_DEPOT} },
-        { content: fmtF(ltdi+ltda+ltpi+ltpa), styles:{fontStyle:'bold', fillColor:C_LIGHT, textColor:C_SUCCESS} },
-        { content: '', styles:{fillColor:C_LIGHT} }
-      ]);
-    });
 
-    doc.autoTable({
-      head, body, startY: y,
-      margin: {left: ML, right: MR},
-      styles: {fontSize: 6.5, cellPadding: 1.5, overflow:'ellipsize'},
-      headStyles: {fillColor:C_PRIMARY, textColor:C_WHITE, fontStyle:'bold', fontSize:7},
-      alternateRowStyles: {fillColor:[250,252,255]},
-      columnStyles: {
-        0:{cellWidth:12}, 1:{cellWidth:20},
-        2:{textColor:C_DAFEANNE}, 3:{textColor:C_DAFEANNE}, 4:{textColor:C_DAFEANNE,fontStyle:'bold'},
-        5:{textColor:C_DEPOT},    6:{textColor:C_DEPOT},    7:{textColor:C_DEPOT,fontStyle:'bold'},
-        8:{textColor:C_SUCCESS, fontStyle:'bold'},
-        9:{cellWidth:35}
-      },
-      didAddPage: () => { pageHeader(); }
-    });
-    y = doc.lastAutoTable.finalY + 14;
+      doc.autoTable({
+        head, body, startY: y,
+        margin: {left: ML, right: MR},
+        styles: {fontSize: 7, cellPadding: 2, overflow:'ellipsize'},
+        headStyles: {fillColor:C_ENT, textColor:C_WHITE, fontStyle:'bold', fontSize:7.5},
+        alternateRowStyles: {fillColor:[250,252,255]},
+        columnStyles: {
+          0:{cellWidth:14}, 1:{cellWidth:30},
+          2:{textColor:C_ENT}, 3:{textColor:C_ENT},
+          4:{textColor:C_SUCCESS, fontStyle:'bold'},
+          5:{cellWidth:50}
+        },
+        didAddPage: () => { pageHeader(); }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    }
 
     if (periods.indexOf(period) < periods.length - 1) {
       doc.addPage();
@@ -268,6 +271,50 @@ function exportExcel(periods, filename) {
   const wsRecap = XLSX.utils.aoa_to_sheet(recap);
   wsRecap['!cols'] = [18,8,16,16,16,16,16,16,16,16,16].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb, wsRecap, 'RÉCAPITULATIF');
+
+  // ── Feuille INAM consolidée ──
+  const inamRows = [
+    ['PHARMACIE DAFEANNE — RÉCAPITULATIF INAM'],
+    [`Généré le ${new Date().toLocaleDateString('fr-FR')}`],
+    [],
+    ['PÉRIODE','QUINT.','DAFEANNE INAM','DÉPÔT INAM','TOTAL INAM']
+  ];
+  periods.forEach(p => {
+    inamRows.push([
+      `${MOIS_NOMS[p.month]} ${p.year}`, p.quinzaine,
+      t(p,'dafeanne.inam'), t(p,'depot.inam'), t(p,'inam')
+    ]);
+  });
+  inamRows.push(['TOTAL GÉNÉRAL','',
+    periods.reduce((s,p)=>s+t(p,'dafeanne.inam'),0),
+    periods.reduce((s,p)=>s+t(p,'depot.inam'),0),
+    periods.reduce((s,p)=>s+t(p,'inam'),0)
+  ]);
+  const wsInam = XLSX.utils.aoa_to_sheet(inamRows);
+  wsInam['!cols'] = [18,8,18,18,18].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsInam, 'INAM');
+
+  // ── Feuille AMU consolidée ──
+  const amuRows = [
+    ['PHARMACIE DAFEANNE — RÉCAPITULATIF AMU'],
+    [`Généré le ${new Date().toLocaleDateString('fr-FR')}`],
+    [],
+    ['PÉRIODE','QUINT.','DAFEANNE AMU','DÉPÔT AMU','TOTAL AMU']
+  ];
+  periods.forEach(p => {
+    amuRows.push([
+      `${MOIS_NOMS[p.month]} ${p.year}`, p.quinzaine,
+      t(p,'dafeanne.amu'), t(p,'depot.amu'), t(p,'amu')
+    ]);
+  });
+  amuRows.push(['TOTAL GÉNÉRAL','',
+    periods.reduce((s,p)=>s+t(p,'dafeanne.amu'),0),
+    periods.reduce((s,p)=>s+t(p,'depot.amu'),0),
+    periods.reduce((s,p)=>s+t(p,'amu'),0)
+  ]);
+  const wsAmu = XLSX.utils.aoa_to_sheet(amuRows);
+  wsAmu['!cols'] = [18,8,18,18,18].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsAmu, 'AMU');
 
   // ── Une feuille par quinzaine ──
   periods.forEach(period => {

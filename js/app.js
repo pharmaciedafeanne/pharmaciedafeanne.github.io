@@ -799,7 +799,6 @@ function openAddUser() {
   document.getElementById('modal-user-title').textContent = 'Nouvel opérateur';
   document.getElementById('user-uid').value  = '';
   document.getElementById('user-name').value = '';
-  document.getElementById('user-email').value = '';
   document.getElementById('user-password').value = '';
   document.getElementById('user-password').placeholder = '';
   ['cloturer','rouvrir','inam','caisse','recharge','fournisseurs','import'].forEach(p => {
@@ -844,7 +843,7 @@ async function doSaveUser() {
   const email    = document.getElementById('user-email').value.trim();
   const role     = document.getElementById('user-role').value;
   const password = document.getElementById('user-password').value;
-  if (!name || !email) { toast('Remplissez tous les champs obligatoires','error'); return; }
+  if (!name) { toast('Le nom est obligatoire','error'); return; }
 
   const btn = document.getElementById('btn-save-user');
   btn.disabled = true; btn.textContent = 'Enregistrement…';
@@ -860,8 +859,10 @@ async function doSaveUser() {
       toast('Opérateur modifié ✓','success');
     } else {
       if (!password) { toast('Le mot de passe est obligatoire','error'); btn.disabled=false; btn.textContent='💾 Enregistrer'; return; }
-      const pharmacieId = currentUser.pharmacieId || _currentPharmacieId || null;
-      const newUid = await createAccount(name, email, password, 'operateur', pharmacieId);
+      const pharmacieId = (currentUser.pharmacieId || _currentPharmacieId || 'PHARMACIE').toUpperCase();
+      // Email technique auto-généré, invisible pour l'utilisateur
+      const autoEmail = `${pharmacieId.toLowerCase()}_op_${Date.now()}@pharmacie.app`;
+      const newUid = await createAccount(name, autoEmail, password, 'operateur', pharmacieId);
       await updateUserProfile(newUid, { permissions });
       toast('Opérateur créé ✓','success');
     }

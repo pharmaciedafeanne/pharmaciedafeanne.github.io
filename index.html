@@ -71,9 +71,11 @@
       <div class="nav-item" data-view="inam-amu"    id="nav-inam-amu"    onclick="navigate('inam-amu')"><span class="icon">🏥</span> Paiements INAM AMU</div>
       <div class="nav-item" data-view="caisse"      id="nav-caisse"      onclick="navigate('caisse')"><span class="icon">💰</span> Petite Caisse</div>
       <div class="nav-item" data-view="fournisseurs" id="nav-fournisseurs" onclick="navigate('fournisseurs')"><span class="icon">🏪</span> Fournisseurs</div>
+      <div class="nav-item" data-view="catalogue-frs" id="nav-catalogue-frs" onclick="navigate('catalogue-frs')"><span class="icon">📋</span> Catalogue Fournisseurs</div>
 
       <div class="nav-section-label" id="nav-section-data">Données</div>
       <div class="nav-item" data-view="donnees" id="nav-donnees" onclick="navigate('donnees')"><span class="icon">📊</span> Section Données</div>
+      <div class="nav-item" data-view="journal" id="nav-journal" onclick="navigate('journal')"><span class="icon">📒</span> Journal de bord</div>
 
       <div class="nav-section-label">Administration</div>
       <div class="nav-item" data-view="import" id="nav-import" onclick="navigate('import')"><span class="icon">📥</span> Importer Excel</div>
@@ -519,6 +521,35 @@
         </div>
       </div>
 
+      <!-- ── CATALOGUE FOURNISSEURS ─────────────────── -->
+      <div id="view-catalogue-frs" class="hidden">
+        <div class="card">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <span>Catalogue des Fournisseurs</span>
+            <button class="btn btn-primary btn-sm" onclick="openAddCatFrs()">+ Ajouter un fournisseur</button>
+          </div>
+          <div class="card-body" style="padding:0">
+            <table class="data-table">
+              <thead><tr><th>Nom</th><th>Téléphone</th><th>Adresse</th><th>Actions</th></tr></thead>
+              <tbody id="cat-frs-tbody"><tr><td colspan="4" style="text-align:center;padding:20px">Chargement…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── JOURNAL DE BORD ─────────────────────────── -->
+      <div id="view-journal" class="hidden">
+        <div class="card">
+          <div class="card-header">Journal de bord</div>
+          <div class="card-body" style="padding:0">
+            <table class="data-table">
+              <thead><tr><th>Date</th><th>Heure</th><th>Utilisateur</th><th>Action</th><th>Détails</th></tr></thead>
+              <tbody id="journal-tbody"><tr><td colspan="5" style="text-align:center;padding:20px">Chargement…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- ── SECTION DONNÉES ─────────────────────────── -->
       <div id="view-donnees" class="hidden">
         <div class="card">
@@ -786,6 +817,24 @@
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" onclick="saveDepense()">💾 Enregistrer</button>
+    </div>
+  </div>
+
+  <!-- Modal Catalogue Fournisseur -->
+  <div class="modal modal-sm hidden" id="modal-cat-frs">
+    <div class="modal-header">
+      <h3 id="modal-cat-frs-title">🏭 Fournisseur</h3>
+      <button class="btn-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="cat-frs-id">
+      <div class="form-row"><div class="field"><label>Nom *</label><input type="text" id="cat-frs-nom" required></div></div>
+      <div class="form-row"><div class="field"><label>Téléphone</label><input type="text" id="cat-frs-tel"></div></div>
+      <div class="form-row"><div class="field"><label>Adresse</label><input type="text" id="cat-frs-adresse"></div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveCatFrs()">Enregistrer</button>
     </div>
   </div>
 
@@ -1084,13 +1133,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
 <!-- App (ordre requis) -->
-<script src="js/firebase-config.js?v=20260629"></script>
-<script src="js/data.js?v=20260629"></script>
-<script src="js/auth.js?v=20260629"></script>
-<script src="js/import.js?v=20260629"></script>
-<script src="js/export.js?v=20260629"></script>
-<script src="js/app.js?v=20260629"></script>
-<script src="js/import-historique.js?v=20260629"></script>
+<script src="js/firebase-config.js?v=20260630"></script>
+<script src="js/data.js?v=20260630"></script>
+<script src="js/auth.js?v=20260630"></script>
+<script src="js/import.js?v=20260630"></script>
+<script src="js/export.js?v=20260630"></script>
+<script src="js/app.js?v=20260630"></script>
+<script src="js/import-historique.js?v=20260630"></script>
 
 </body>
 </html>

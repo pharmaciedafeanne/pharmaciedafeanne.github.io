@@ -706,81 +706,77 @@ function lotHeaderLabel(lot) {
 
 function renderLotsBuilder() {
   const c = document.getElementById('lots-builder');
-  if (!_lots.length) {
-    c.innerHTML = `<div class="empty-state" style="padding:30px">
-      <div class="empty-icon">📦</div><h3>Aucun lot</h3>
-      <p>Cliquez sur "Ajouter un lot" pour commencer la saisie.</p></div>`;
-    return;
-  }
-  c.innerHTML = _lots.map(lot => {
-    if (!lot.entite) {
-      // Sélection de l'entité obligatoire avant de saisir
-      return `
-      <div class="lot-card" style="margin-bottom:14px">
-        <div class="lot-header" style="cursor:default;justify-content:space-between">
-          <h4>${lotHeaderLabel(lot)}</h4>
-          <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer</button>
-        </div>
-        <div class="lot-body open" style="padding:24px;text-align:center">
-          <p style="margin-bottom:14px;color:var(--text-muted);font-size:14px">
-            Choisissez l'entité de ce lot (figée pour tous les bons) :
-          </p>
-          <div style="display:flex;gap:16px;justify-content:center">
-            <button class="btn btn-primary" style="min-width:120px;font-size:15px" onclick="setLotEntite(${lot.numero},'INAM')">🏥 INAM</button>
-            <button class="btn btn-success" style="min-width:120px;font-size:15px" onclick="setLotEntite(${lot.numero},'AMU')">💊 AMU</button>
-          </div>
-        </div>
-      </div>`;
-    }
+  let html = '';
 
-    const e = lot.entite;
-    return `
-    <div class="lot-card" style="margin-bottom:14px">
-      <div class="lot-header" style="cursor:default;justify-content:space-between">
-        <h4>${lotHeaderLabel(lot)}</h4>
-        <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer le lot</button>
-      </div>
-      <div class="lot-body open">
-        <table class="bons-table">
-          <thead>
-            <tr>
-              <th style="width:110px">BON</th>
-              <th class="th-dafeanne">💊 DAFEANNE ${e} (F)</th>
-              <th class="th-depot">🏪 DÉPÔT ${e} (F)</th>
-              <th>OBSERVATION</th>
-              <th style="width:36px"></th>
-            </tr>
-          </thead>
-          <tbody id="bon-rows-${lot.numero}">
-            ${lot.bons.map(bon => bonRow(lot.numero, bon, e)).join('')}
-          </tbody>
-          <tfoot>
-            <tr class="lot-total-row">
-              <td><strong>SOUS-TOTAL LOT ${lot.numero} — ${e}</strong></td>
-              <td class="amount th-dafeanne" id="st-${lot.numero}-df">0</td>
-              <td class="amount th-depot"    id="st-${lot.numero}-dp">0</td>
-              <td class="amount" colspan="2">Total : <strong id="st-${lot.numero}-total" style="color:var(--primary)">0</strong> F</td>
-            </tr>
-          </tfoot>
-        </table>
-        <div style="padding:10px 12px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          ${lot.bons.length < 10
-            ? `<button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ Ajouter un bon</button>`
-            : `<span style="color:var(--danger);font-size:12px;font-weight:600">⚠️ Lot complet (10/10)</span>`
-          }
-          ${lot.bons.length >= 10
-            ? `<button class="btn btn-primary btn-sm" onclick="addLot();document.getElementById('lots-builder').lastElementChild.scrollIntoView({behavior:'smooth'})">➕ Lot suivant →</button>`
-            : ''
-          }
-        </div>
-      </div>
+  if (!_lots.length) {
+    html += `<div style="padding:20px;text-align:center;color:var(--text-muted)">
+      <div style="font-size:40px;margin-bottom:8px">📦</div>
+      <p style="margin-bottom:16px">Aucun lot — commencez par en créer un.</p>
     </div>`;
-  }).join('') + `
-  <div style="padding:12px 0 4px;text-align:center">
-    <button class="btn btn-outline" style="width:100%;border-style:dashed" onclick="addLot()">➕ Ajouter un lot</button>
+  } else {
+    _lots.forEach(lot => {
+      if (!lot.entite) {
+        html += `
+        <div class="lot-card" style="margin-bottom:14px">
+          <div class="lot-header" style="cursor:default;justify-content:space-between">
+            <h4>${lotHeaderLabel(lot)}</h4>
+            <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer</button>
+          </div>
+          <div class="lot-body open" style="padding:24px;text-align:center">
+            <p style="margin-bottom:14px;color:var(--text-muted);font-size:14px">Choisissez l'entité de ce lot :</p>
+            <div style="display:flex;gap:16px;justify-content:center">
+              <button class="btn btn-primary" style="min-width:130px;font-size:15px" onclick="setLotEntite(${lot.numero},'INAM')">🏥 INAM</button>
+              <button class="btn btn-success" style="min-width:130px;font-size:15px" onclick="setLotEntite(${lot.numero},'AMU')">💊 AMU</button>
+            </div>
+          </div>
+        </div>`;
+      } else {
+        const e = lot.entite;
+        const complet = lot.bons.length >= 10;
+        html += `
+        <div class="lot-card" style="margin-bottom:14px">
+          <div class="lot-header" style="cursor:default;justify-content:space-between">
+            <h4>${lotHeaderLabel(lot)}</h4>
+            <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer le lot</button>
+          </div>
+          <div class="lot-body open">
+            <table class="bons-table">
+              <thead><tr>
+                <th style="width:110px">BON</th>
+                <th class="th-dafeanne">💊 DAFEANNE ${e} (F)</th>
+                <th class="th-depot">🏪 DÉPÔT ${e} (F)</th>
+                <th>OBSERVATION</th>
+                <th style="width:36px"></th>
+              </tr></thead>
+              <tbody id="bon-rows-${lot.numero}">
+                ${lot.bons.map(bon => bonRow(lot.numero, bon, e)).join('')}
+              </tbody>
+              <tfoot><tr class="lot-total-row">
+                <td><strong>SOUS-TOTAL LOT ${lot.numero} — ${e}</strong></td>
+                <td class="amount th-dafeanne" id="st-${lot.numero}-df">0</td>
+                <td class="amount th-depot"    id="st-${lot.numero}-dp">0</td>
+                <td class="amount" colspan="2">Total : <strong id="st-${lot.numero}-total" style="color:var(--primary)">0</strong> F</td>
+              </tr></tfoot>
+            </table>
+            <div style="padding:12px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              ${complet
+                ? `<span style="color:var(--danger);font-size:12px;font-weight:600">⚠️ Lot complet (10/10)</span>
+                   <button class="btn btn-primary btn-sm" onclick="addLot()">➕ Lot suivant →</button>`
+                : `<button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ Ajouter un bon</button>`
+              }
+            </div>
+          </div>
+        </div>`;
+      }
+    });
+  }
+
+  // Bouton ajouter un lot — toujours visible en bas
+  html += `<div style="padding:12px;margin-top:4px">
+    <button class="btn btn-primary" style="width:100%;padding:12px;font-size:15px" onclick="addLot()">➕ Ajouter un lot</button>
   </div>`;
 
-  // Calculer les sous-totaux pour les lots déjà remplis
+  c.innerHTML = html;
   _lots.forEach(lot => { if (lot.entite) updateLotSubtotal(lot.numero); });
 }
 

@@ -628,6 +628,12 @@ function addLot() {
   const n = _lots.length + 1;
   _lots.push({ numero: n, entite: null, bons: [] });
   renderLotsBuilder();
+  setTimeout(() => {
+    const builder = document.getElementById('lots-builder');
+    if (builder && builder.lastElementChild) {
+      builder.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 80);
 }
 
 function setLotEntite(lotNum, entite) {
@@ -757,12 +763,22 @@ function renderLotsBuilder() {
             </tr>
           </tfoot>
         </table>
-        <div style="padding:10px 12px;border-top:1px dashed var(--border)">
-          <button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ Ajouter un bon</button>
+        <div style="padding:10px 12px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          ${lot.bons.length < 10
+            ? `<button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ Ajouter un bon</button>`
+            : `<span style="color:var(--danger);font-size:12px;font-weight:600">⚠️ Lot complet (10/10)</span>`
+          }
+          ${lot.bons.length >= 10
+            ? `<button class="btn btn-primary btn-sm" onclick="addLot();document.getElementById('lots-builder').lastElementChild.scrollIntoView({behavior:'smooth'})">➕ Lot suivant →</button>`
+            : ''
+          }
         </div>
       </div>
     </div>`;
-  }).join('');
+  }).join('') + `
+  <div style="padding:12px 0 4px;text-align:center">
+    <button class="btn btn-outline" style="width:100%;border-style:dashed" onclick="addLot()">➕ Ajouter un lot</button>
+  </div>`;
 
   // Calculer les sous-totaux pour les lots déjà remplis
   _lots.forEach(lot => { if (lot.entite) updateLotSubtotal(lot.numero); });

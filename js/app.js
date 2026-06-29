@@ -12,14 +12,25 @@ let _setupDone = false;
 // ══════════════════════════════════════════════════════════════
 
 async function checkSetupDone() {
-  // Vrai si au moins un superadmin existe dans Firestore
+  // 1. D'abord vérifier le flag local (rapide)
+  if (localStorage.getItem('dafeanne_setup_done')) return true;
+  // 2. Vérifier le document config/platform (lecture publique autorisée)
+  try {
+    const doc = await getDB().collection('config').doc('platform').get();
+    if (doc.exists && doc.data().setupDone) {
+      localStorage.setItem('dafeanne_setup_done', '1');
+      return true;
+    }
+  } catch(e) { /* règles bloquent — on essaie users */ }
+  // 3. Essayer la collection users
   try {
     const snap = await getDB().collection('users').where('role','==','superadmin').limit(1).get();
-    return !snap.empty;
-  } catch(e) {
-    // Pas encore d'accès Firestore (règles ouvertes non encore appliquées)
-    return !!localStorage.getItem('dafeanne_setup_done');
-  }
+    if (!snap.empty) {
+      localStorage.setItem('dafeanne_setup_done', '1');
+      return true;
+    }
+  } catch(e) { /* règles bloquent aussi */ }
+  return false;
 }
 
 function initApp() {

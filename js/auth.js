@@ -90,6 +90,7 @@ async function seedSuperAdmin(name, email, password) {
         unsub();
         try {
           await createUserProfile(user.uid, { name, email, role: 'superadmin' });
+          await getDB().collection('config').doc('platform').set({ setupDone: true, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
           await getAuth().signOut();
           resolve();
         } catch(e) { reject(e); }

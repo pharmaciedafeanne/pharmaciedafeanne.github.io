@@ -11,28 +11,6 @@ let _setupDone = false;
 //  INIT
 // ══════════════════════════════════════════════════════════════
 
-async function checkSetupDone() {
-  // 1. D'abord vérifier le flag local (rapide)
-  if (localStorage.getItem('dafeanne_setup_done')) return true;
-  // 2. Vérifier le document config/platform (lecture publique autorisée)
-  try {
-    const doc = await getDB().collection('config').doc('platform').get();
-    if (doc.exists && doc.data().setupDone) {
-      localStorage.setItem('dafeanne_setup_done', '1');
-      return true;
-    }
-  } catch(e) { /* règles bloquent — on essaie users */ }
-  // 3. Essayer la collection users
-  try {
-    const snap = await getDB().collection('users').where('role','==','superadmin').limit(1).get();
-    if (!snap.empty) {
-      localStorage.setItem('dafeanne_setup_done', '1');
-      return true;
-    }
-  } catch(e) { /* règles bloquent aussi */ }
-  return false;
-}
-
 function initApp() {
   try {
     initFirebase();
@@ -41,16 +19,16 @@ function initApp() {
     return;
   }
 
-  onAuthReady(async (status, user) => {
+  onAuthReady((status, user) => {
     if (status === 'logged_in') {
       showMainApp(user);
     } else {
-      const setupDone = await checkSetupDone();
-      if (setupDone) {
-        localStorage.setItem('dafeanne_setup_done', '1'); // synchroniser le flag local
-        showLogin();
-      } else {
+      // Le setup est définitivement terminé — afficher directement le login
+      // La page setup reste accessible via ?setup=1 dans l'URL si besoin
+      if (location.search.includes('setup=1')) {
         showSetup();
+      } else {
+        showLogin();
       }
     }
   });

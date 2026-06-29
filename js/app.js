@@ -493,6 +493,10 @@ async function addBonToExisting(periodKey, lotNum) {
   const period = snap.data();
   const lot = (period.lots || []).find(l => l.numero === lotNum);
   if (!lot) return;
+  if ((lot.bons || []).length >= 10) {
+    toast(`⚠️ LOT N°${lotNum}${lot.entite?' ('+lot.entite+')':''} a atteint 10 bons. Créez un nouveau lot pour continuer.`, 'info');
+    return;
+  }
   const bonNum = (lot.bons || []).length + 1;
   lot.bons.push({
     id: `bon_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
@@ -626,6 +630,10 @@ function setLotEntite(lotNum, entite) {
 function addBon(lotNum) {
   const lot = _lots.find(l => l.numero === lotNum);
   if (!lot || !lot.entite) return;
+  if (lot.bons.length >= 10) {
+    toast(`⚠️ LOT N°${lot.numero} (${lot.entite}) a atteint 10 bons. Créez un nouveau lot pour continuer.`, 'info');
+    return;
+  }
   const bonNum = lot.bons.length + 1;
   const bon = {
     id: `bon_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
@@ -670,8 +678,11 @@ function lotHeaderLabel(lot) {
   const badge = lot.entite
     ? `<span class="badge badge-${lot.entite==='INAM'?'q1':'q2'}" style="margin-left:8px">${lot.entite}</span>`
     : '';
-  const count = lot.bons.length
-    ? `<span style="font-weight:400;font-size:12px;opacity:.7;margin-left:6px">(${lot.bons.length} bon${lot.bons.length>1?'s':''})</span>`
+  const nb = lot.bons.length;
+  const full = nb >= 10;
+  const countColor = full ? 'color:var(--danger);font-weight:700' : 'opacity:.7';
+  const count = nb
+    ? `<span style="font-weight:400;font-size:12px;margin-left:6px;${countColor}">(${nb}/10 bons${full?' — COMPLET ⚠️':''})</span>`
     : '';
   return `LOT N°${lot.numero}${badge}${count}`;
 }

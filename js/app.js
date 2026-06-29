@@ -797,8 +797,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function openAddUser() {
   document.getElementById('modal-user-title').textContent = 'Nouvel opérateur';
-  document.getElementById('user-form').reset();
-  document.getElementById('user-uid').value = '';
+  document.getElementById('user-uid').value  = '';
+  document.getElementById('user-name').value = '';
+  document.getElementById('user-email').value = '';
+  document.getElementById('user-password').value = '';
+  document.getElementById('user-password').placeholder = '';
+  ['cloturer','rouvrir','inam','caisse','recharge','fournisseurs','import'].forEach(p => {
+    const el = document.getElementById(`perm-${p}`); if (el) el.checked = false;
+  });
   document.getElementById('user-password-row').style.display = 'block';
   // Titulaire ne peut créer que des opérateurs
   const roleSelect = document.getElementById('user-role');

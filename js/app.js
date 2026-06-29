@@ -1355,12 +1355,6 @@ async function enterPharmacie(pharmacieId) {
     const ph = await getPharmacie(pharmacieId);
     if (!ph) { toast('Pharmacie introuvable','error'); return; }
 
-    // Migration des données existantes si première fois pour DAFEANNE
-    if (pharmacieId === 'DAFEANNE') {
-      const migrated = await migrateRootQuinzaines();
-      if (migrated > 0) toast(`${migrated} quinzaines migrées vers DAFEANNE`, 'success');
-    }
-
     setPharmacieContext(pharmacieId);
     document.getElementById('admin-app').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');

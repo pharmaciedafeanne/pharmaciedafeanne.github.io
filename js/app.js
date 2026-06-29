@@ -590,12 +590,8 @@ function removeBon(lotNum, bonId) {
   const lot = _lots.find(l => l.numero === lotNum);
   if (!lot) return;
   lot.bons = lot.bons.filter(b => String(b.id) !== String(bonId));
-  // Renuméroter les bons restants
   lot.bons.forEach((b, i) => { b.numero = i + 1; b.label = `BON N°${i + 1}`; });
-
-  // Supprimer la ligne du DOM
   document.getElementById(`row-${bonId}`)?.remove();
-  // Renuméroter les labels dans le DOM
   const tbody = document.getElementById(`bon-rows-${lotNum}`);
   if (tbody) {
     tbody.querySelectorAll('tr').forEach((tr, i) => {
@@ -605,6 +601,7 @@ function removeBon(lotNum, bonId) {
     const header = tbody.closest('.lot-card').querySelector('.lot-header h4');
     if (header) header.innerHTML = `LOT N°${lot.numero} <span style="font-weight:400;font-size:12px;opacity:.7">(${lot.bons.length} bon${lot.bons.length > 1 ? 's' : ''})</span>`;
   }
+  updateLotSubtotal(lotNum);
 }
 
 function renderLotsBuilder() {
@@ -639,6 +636,22 @@ function renderLotsBuilder() {
           <tbody id="bon-rows-${lot.numero}">
             ${lot.bons.map(bon => bonRow(lot.numero, bon)).join('')}
           </tbody>
+          <tfoot>
+            <tr class="lot-total-row">
+              <td><strong>SOUS-TOTAL LOT ${lot.numero}</strong></td>
+              <td class="amount th-dafeanne" id="st-${lot.numero}-df-inam">0</td>
+              <td class="amount th-dafeanne" id="st-${lot.numero}-df-amu">0</td>
+              <td class="amount th-depot"    id="st-${lot.numero}-dp-inam">0</td>
+              <td class="amount th-depot"    id="st-${lot.numero}-dp-amu">0</td>
+              <td class="amount" colspan="2">
+                <span style="font-size:11px;color:var(--text-muted)">
+                  💊 <strong id="st-${lot.numero}-df-total">0</strong> F &nbsp;|&nbsp;
+                  🏪 <strong id="st-${lot.numero}-dp-total">0</strong> F &nbsp;|&nbsp;
+                </span>
+                <strong id="st-${lot.numero}-total" style="color:var(--primary)">0</strong> F
+              </td>
+            </tr>
+          </tfoot>
         </table>
         <div style="padding:10px 12px;border-top:1px dashed var(--border)">
           <button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">
@@ -652,22 +665,47 @@ function renderLotsBuilder() {
 function bonRow(lotNum, bon) {
   return `<tr id="row-${bon.id}">
     <td><strong>${bon.label}</strong></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="dafeanne" data-field="inam" value="${bon.dafeanne.inam}" onchange="updateCell(this)"></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="dafeanne" data-field="amu"  value="${bon.dafeanne.amu}"  onchange="updateCell(this)"></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="depot"    data-field="inam" value="${bon.depot.inam}"    onchange="updateCell(this)"></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="depot"    data-field="amu"  value="${bon.depot.amu}"     onchange="updateCell(this)"></td>
-    <td><input type="text" class="cell-input cell-remark" data-lot="${lotNum}" data-bon="${bon.id}" data-account="remarque" data-field="remarque" value="${esc(bon.remarque)}" onchange="updateCell(this)" placeholder="Observation…"></td>
+    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="dafeanne" data-field="inam" value="${bon.dafeanne.inam}" oninput="updateCell(this)"></td>
+    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="dafeanne" data-field="amu"  value="${bon.dafeanne.amu}"  oninput="updateCell(this)"></td>
+    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="depot"    data-field="inam" value="${bon.depot.inam}"    oninput="updateCell(this)"></td>
+    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="depot"    data-field="amu"  value="${bon.depot.amu}"     oninput="updateCell(this)"></td>
+    <td><input type="text" class="cell-input cell-remark" data-lot="${lotNum}" data-bon="${bon.id}" data-account="remarque" data-field="remarque" value="${esc(bon.remarque)}" oninput="updateCell(this)" placeholder="Observation…"></td>
     <td><button class="btn btn-danger btn-sm btn-icon" onclick="removeBon(${lotNum},'${bon.id}')" title="Supprimer ce bon">×</button></td>
   </tr>`;
 }
 
 function updateCell(input) {
   const { lot: lotN, bon: bonId, account, field } = input.dataset;
-  const lot = _lots.find(l => l.numero === parseInt(lotN));
+  const lotNum = parseInt(lotN);
+  const lot = _lots.find(l => l.numero === lotNum);
   const bon = lot && lot.bons.find(b => String(b.id) === String(bonId));
   if (!bon) return;
   if (account === 'remarque') { bon.remarque = input.value; }
   else { bon[account][field] = parseFloat(input.value) || 0; }
+  updateLotSubtotal(lotNum);
+}
+
+function updateLotSubtotal(lotNum) {
+  const lot = _lots.find(l => l.numero === lotNum);
+  if (!lot) return;
+  let dfInam=0, dfAmu=0, dpInam=0, dpAmu=0;
+  lot.bons.forEach(b => {
+    dfInam += b.dafeanne.inam || 0;
+    dfAmu  += b.dafeanne.amu  || 0;
+    dpInam += b.depot.inam    || 0;
+    dpAmu  += b.depot.amu     || 0;
+  });
+  const dfTotal = dfInam + dfAmu;
+  const dpTotal = dpInam + dpAmu;
+  const total   = dfTotal + dpTotal;
+  const s = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = fmtA(val); };
+  s(`st-${lotNum}-df-inam`,  dfInam);
+  s(`st-${lotNum}-df-amu`,   dfAmu);
+  s(`st-${lotNum}-dp-inam`,  dpInam);
+  s(`st-${lotNum}-dp-amu`,   dpAmu);
+  s(`st-${lotNum}-df-total`, dfTotal);
+  s(`st-${lotNum}-dp-total`, dpTotal);
+  s(`st-${lotNum}-total`,    total);
 }
 
 function removeLot(num) {

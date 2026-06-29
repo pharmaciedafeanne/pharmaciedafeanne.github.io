@@ -69,24 +69,72 @@ function showLogin() {
   document.getElementById('setup-page').classList.add('hidden');
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login-page').classList.remove('hidden');
+  startLoginClock();
+}
+
+// Horloge de la page de connexion
+let _clockInterval = null;
+function startLoginClock() {
+  if (_clockInterval) clearInterval(_clockInterval);
+  function tick() {
+    const now = new Date();
+    const clockEl = document.getElementById('lp-clock');
+    const dateEl  = document.getElementById('lp-date');
+    if (clockEl) clockEl.textContent = now.toLocaleTimeString('fr-FR');
+    if (dateEl) {
+      const jours = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+      const mois  = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+      dateEl.textContent = `${jours[now.getDay()]} ${now.getDate()} ${mois[now.getMonth()]} ${now.getFullYear()}`;
+    }
+  }
+  tick();
+  _clockInterval = setInterval(tick, 1000);
+}
+
+// Basculer entre connexion normale et connexion admin
+let _adminMode = false;
+function toggleAdminLogin() {
+  _adminMode = !_adminMode;
+  const codeRow = document.getElementById('login-code-row');
+  const linkEl  = document.getElementById('lp-admin-link');
+  const btn     = document.getElementById('btn-login');
+  if (_adminMode) {
+    codeRow.classList.add('hidden');
+    if (linkEl) linkEl.textContent = '↩ Retour connexion pharmacie';
+    if (btn) btn.textContent = 'ACCÉDER AU PANNEAU ADMIN →';
+  } else {
+    codeRow.classList.remove('hidden');
+    if (linkEl) linkEl.textContent = '🔑 Accès Administrateur';
+    if (btn) btn.textContent = 'ACCÉDER À MA PHARMACIE →';
+  }
 }
 
 document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const code  = (document.getElementById('login-code').value || '').trim().toUpperCase();
   const email = document.getElementById('login-email').value.trim();
   const pass  = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   const btn   = document.getElementById('btn-login');
-  errEl.classList.remove('show');
+  errEl.classList.add('hidden'); errEl.textContent = '';
   btn.disabled = true; btn.textContent = 'Connexion…';
   try {
-    await login(email, pass);
+    const user = await login(email, pass);
+    // Vérification du code pharmacie (sauf mode admin)
+    if (!_adminMode && user.role !== 'superadmin') {
+      const pid = user.pharmacieId || 'DAFEANNE';
+      if (code && code !== pid) {
+        await logout();
+        throw new Error('Code pharmacie incorrect.');
+      }
+    }
     // onAuthReady appellera showMainApp
   } catch(err) {
     errEl.textContent = err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found'
       ? 'Email ou mot de passe incorrect.' : err.message;
-    errEl.classList.add('show');
-    btn.disabled = false; btn.textContent = 'Se connecter';
+    errEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = _adminMode ? 'ACCÉDER AU PANNEAU ADMIN →' : 'ACCÉDER À MA PHARMACIE →';
   }
 });
 
@@ -114,6 +162,7 @@ function showMainApp(user) {
     document.getElementById('app').classList.remove('hidden');
     renderSidebar(user);
     navigate('dashboard');
+    setTimeout(check72hNotifications, 2000);
   }
 }
 
@@ -157,7 +206,7 @@ function navigate(view, params = {}) {
   if (params.key) appState.detailKey = params.key;
   setActiveNav(view);
 
-  ['dashboard','quinzaines','detail','import','nouvelle','users'].forEach(v => {
+  ['dashboard','quinzaines','detail','import','nouvelle','users','inam-amu','caisse','fournisseurs'].forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.classList.add('hidden');
   });
@@ -165,17 +214,29 @@ function navigate(view, params = {}) {
   if (el) el.classList.remove('hidden');
 
   const titles = {
-    dashboard:  '📊 Tableau de Bord',
-    quinzaines: '📋 Gestion des Quinzaines',
-    detail:     '🔍 Détail Quinzaine',
-    import:     '📥 Import Excel',
-    nouvelle:   '➕ Nouvelle Quinzaine',
-    users:      '👥 Gestion des Utilisateurs'
+    dashboard:    '📊 Tableau de Bord',
+    quinzaines:   '📋 Gestion des Quinzaines',
+    detail:       '🔍 Détail Quinzaine',
+    import:       '📥 Import Excel',
+    nouvelle:     '➕ Nouvelle Quinzaine',
+    users:        '👥 Gestion des Utilisateurs',
+    'inam-amu':   '🏥 Suivi Paiements INAM / AMU',
+    caisse:       '💰 Petite Caisse',
+    fournisseurs: '🏭 Suivi Fournisseurs'
   };
   document.getElementById('content-title').textContent = titles[view] || '';
 
-  ({ dashboard: renderDashboard, quinzaines: renderQuinzaines, detail: () => renderDetail(appState.detailKey),
-     import: renderImportView, nouvelle: renderNouvelle, users: renderUsers }[view] || (() => {}))();
+  ({
+    dashboard:    renderDashboard,
+    quinzaines:   renderQuinzaines,
+    detail:       () => renderDetail(appState.detailKey),
+    import:       renderImportView,
+    nouvelle:     renderNouvelle,
+    users:        renderUsers,
+    'inam-amu':   renderInamAmu,
+    caisse:       renderCaisse,
+    fournisseurs: renderFournisseurs
+  }[view] || (() => {}))();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -291,6 +352,23 @@ async function renderDetail(key) {
   } catch(e) { toast('Erreur chargement quinzaine','error'); return; }
 
   document.getElementById('detail-period-title').textContent = periodLbl(period);
+
+  // Bannière clôture
+  const clotureBanner = document.getElementById('cloture-banner');
+  if (clotureBanner) {
+    const closed = !!period.cloturee;
+    const canReopen = currentUser && (currentUser.role === 'titulaire' || currentUser.role === 'superadmin' ||
+      (currentUser.permissions && currentUser.permissions.rouvrir));
+    const canClose  = currentUser && (currentUser.role !== 'operateur' ||
+      (currentUser.permissions && currentUser.permissions.cloturer));
+    clotureBanner.className = `cloture-banner ${closed ? 'closed' : 'open'}`;
+    clotureBanner.innerHTML = closed
+      ? `<span>🔒 Quinzaine <strong>clôturée</strong> — saisie verrouillée</span>
+         ${canReopen ? `<button class="btn-rouvrir" onclick="doRouvrirQuinzaine('${key}')">🔓 Rouvrir</button>` : ''}`
+      : `<span>🟢 Quinzaine <strong>ouverte</strong></span>
+         ${canClose ? `<button class="btn-cloturer" onclick="doCloturerQuinzaine('${key}')">🔒 Clôturer</button>` : ''}`;
+    clotureBanner.classList.remove('hidden');
+  }
 
   const T = period.totaux || {};
   const df = T.dafeanne || {}; const dp = T.depot || {};
@@ -756,6 +834,12 @@ async function openEditUser(uid) {
   document.getElementById('user-password').value = '';
   document.getElementById('user-password').placeholder = 'Laisser vide = inchangé';
   document.getElementById('user-password-row').style.display = 'block';
+  // Charger les permissions
+  const perms = u.permissions || {};
+  ['cloturer','rouvrir','fournisseurs','recharge','import'].forEach(p => {
+    const el = document.getElementById(`perm-${p}`);
+    if (el) el.checked = !!perms[p];
+  });
   document.getElementById('btn-save-user').onclick = doSaveUser;
   openModal('modal-user');
 }
@@ -770,9 +854,15 @@ async function doSaveUser() {
 
   const btn = document.getElementById('btn-save-user');
   btn.disabled = true; btn.textContent = 'Enregistrement…';
+  const permissions = {};
+  ['cloturer','rouvrir','fournisseurs','recharge','import'].forEach(p => {
+    const el = document.getElementById(`perm-${p}`);
+    if (el) permissions[p] = el.checked;
+  });
+
   try {
     if (uid) {
-      await updateAccount(uid, { name, role });
+      await updateAccount(uid, { name, role, permissions });
       toast('Utilisateur modifié ✓','success');
     } else {
       if (!password) { toast('Le mot de passe est obligatoire','error'); btn.disabled=false; btn.textContent='💾 Enregistrer'; return; }
@@ -1159,6 +1249,402 @@ async function renderUsers() {
         </td>
       </tr>`).join('');
   } catch(e) { toast('Erreur chargement utilisateurs','error'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CLÔTURE QUINZAINE
+// ══════════════════════════════════════════════════════════════
+
+async function doCloturerQuinzaine(key) {
+  if (!confirm('Clôturer cette quinzaine ? La saisie sera verrouillée.')) return;
+  try {
+    await getQuinzaineDocRef(key).update({ cloturee: true, clotureeAt: firebase.firestore.FieldValue.serverTimestamp() });
+    // Alimenter automatiquement le suivi INAM/AMU
+    const snap = await getQuinzaineDocRef(key).get();
+    if (snap.exists) {
+      const p = snap.data();
+      const T = p.totaux || {};
+      await saveSuiviInamAmu({
+        periodKey: key,
+        label: periodLbl(p),
+        inamTotal:    (T.inam   || 0),
+        amuTotal:     (T.amu    || 0),
+        inamPaye:     0,
+        amuPaye:      0,
+        statut:       'non payé',
+        clotureeAt:   new Date().toISOString()
+      });
+    }
+    toast('Quinzaine clôturée ✓', 'success');
+    renderDetail(key);
+  } catch(e) { toast('Erreur: '+e.message, 'error'); }
+}
+
+async function doRouvrirQuinzaine(key) {
+  if (!confirm('Rouvrir cette quinzaine ?')) return;
+  try {
+    await getQuinzaineDocRef(key).update({ cloturee: false });
+    toast('Quinzaine rouverte ✓', 'success');
+    renderDetail(key);
+  } catch(e) { toast('Erreur: '+e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SUIVI INAM / AMU
+// ══════════════════════════════════════════════════════════════
+
+async function renderInamAmu() {
+  const container = document.getElementById('view-inam-amu');
+  if (!container) return;
+  const tableBody = document.getElementById('inam-tbody');
+  if (tableBody) tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px">Chargement…</td></tr>`;
+  try {
+    const list = await getAllSuiviInamAmu();
+    const totInam  = list.reduce((s,r) => s + (r.inamTotal||0), 0);
+    const totAmu   = list.reduce((s,r) => s + (r.amuTotal||0), 0);
+    const totPayeI = list.reduce((s,r) => s + (r.inamPaye||0), 0);
+    const totPayeA = list.reduce((s,r) => s + (r.amuPaye||0), 0);
+
+    // Cartes résumé
+    const sumRow = document.getElementById('inam-summary');
+    if (sumRow) sumRow.innerHTML = `
+      <div class="inam-sum-card inam-c"><div class="isc-val">${fmtA(totInam)}</div><div class="isc-label">Total INAM facturé</div></div>
+      <div class="inam-sum-card inam-c"><div class="isc-val">${fmtA(totPayeI)}</div><div class="isc-label">INAM reçu</div></div>
+      <div class="inam-sum-card amu-c"><div class="isc-val">${fmtA(totAmu)}</div><div class="isc-label">Total AMU facturé</div></div>
+      <div class="inam-sum-card amu-c"><div class="isc-val">${fmtA(totPayeA)}</div><div class="isc-label">AMU reçu</div></div>`;
+
+    if (!tableBody) return;
+    if (!list.length) {
+      tableBody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+        <div class="empty-icon">🏥</div><h3>Aucun enregistrement</h3>
+        <p>Les paiements apparaissent automatiquement lorsqu'une quinzaine est clôturée.</p></div></td></tr>`;
+      return;
+    }
+    tableBody.innerHTML = list.map(r => {
+      const restI = (r.inamTotal||0) - (r.inamPaye||0);
+      const restA = (r.amuTotal||0)  - (r.amuPaye||0);
+      const statut = (restI + restA === 0) ? 'payé' : ((r.inamPaye||0)+(r.amuPaye||0) > 0) ? 'partiel' : 'non payé';
+      const cls = statut === 'payé' ? 'statut-paye' : statut === 'partiel' ? 'statut-partiel' : 'statut-nonpaye';
+      return `<tr>
+        <td>${esc(r.label||r.periodKey)}</td>
+        <td class="amount">${fmtA(r.inamTotal)}</td>
+        <td class="amount">${fmtA(r.amuTotal)}</td>
+        <td class="amount">${fmtA(r.inamPaye)}</td>
+        <td class="amount">${fmtA(r.amuPaye)}</td>
+        <td class="amount">${fmtA(restI+restA)}</td>
+        <td><span class="${cls}">${statut}</span></td>
+        <td><button class="btn btn-outline btn-sm" onclick="openInamPay('${r.id}')">💳 Paiement</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error(e); toast('Erreur chargement INAM/AMU','error'); }
+}
+
+function openInamPay(id) {
+  document.getElementById('inam-pay-id').value = id;
+  document.getElementById('inam-pay-inam').value = 0;
+  document.getElementById('inam-pay-amu').value  = 0;
+  document.getElementById('inam-pay-date').value = new Date().toISOString().slice(0,10);
+  openModal('modal-inam-pay');
+}
+
+async function saveInamPay() {
+  const id   = document.getElementById('inam-pay-id').value;
+  const inam = parseFloat(document.getElementById('inam-pay-inam').value)||0;
+  const amu  = parseFloat(document.getElementById('inam-pay-amu').value) ||0;
+  try {
+    const list = await getAllSuiviInamAmu();
+    const rec  = list.find(r => r.id === id);
+    if (!rec) throw new Error('Enregistrement introuvable');
+    await updateSuiviInamAmu(id, {
+      inamPaye: (rec.inamPaye||0) + inam,
+      amuPaye:  (rec.amuPaye||0)  + amu,
+      statut:   ((rec.inamPaye||0)+inam+(rec.amuPaye||0)+amu) >= ((rec.inamTotal||0)+(rec.amuTotal||0)) ? 'payé' : 'partiel'
+    });
+    closeModal();
+    toast('Paiement enregistré ✓','success');
+    renderInamAmu();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  PETITE CAISSE
+// ══════════════════════════════════════════════════════════════
+
+async function renderCaisse() {
+  const tableBody = document.getElementById('caisse-tbody');
+  if (!tableBody) return;
+  tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px">Chargement…</td></tr>`;
+  try {
+    const ops = await getAllCaisseOps();
+    // Calcul solde courant
+    let solde = 0;
+    ops.slice().reverse().forEach(op => {
+      if (op.type === 'recharge') solde += (op.montant||0);
+      else solde -= (op.montant||0);
+    });
+    const soldeEl = document.getElementById('caisse-solde');
+    if (soldeEl) soldeEl.textContent = fmtA(solde);
+    const lastRecharge = ops.find(o => o.type === 'recharge');
+    const lrEl = document.getElementById('caisse-last-recharge');
+    if (lrEl) lrEl.textContent = lastRecharge ? (lastRecharge.date || '—') : '—';
+
+    // Alertes prospectives (dans les 72h)
+    const now = Date.now();
+    const limit72 = now + 72 * 3600 * 1000;
+    const prospects = ops.filter(op => op.prospectif && op.dateEcheance && new Date(op.dateEcheance).getTime() <= limit72 && new Date(op.dateEcheance).getTime() >= now);
+    const notifBar = document.getElementById('caisse-notif-bar');
+    if (notifBar) {
+      if (prospects.length) {
+        notifBar.classList.remove('hidden');
+        notifBar.textContent = `⚠️ ${prospects.length} dépense(s) prospective(s) à régler dans les 72h.`;
+      } else notifBar.classList.add('hidden');
+    }
+
+    if (!ops.length) {
+      tableBody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+        <div class="empty-icon">💰</div><h3>Caisse vide</h3>
+        <p>Rechargez la caisse ou enregistrez une dépense.</p></div></td></tr>`;
+      return;
+    }
+    // Calcul solde progressif
+    let soldeRun = 0;
+    const opsAsc = ops.slice().reverse();
+    const soldesMap = {};
+    opsAsc.forEach(op => {
+      if (op.type === 'recharge') soldeRun += (op.montant||0);
+      else soldeRun -= (op.montant||0);
+      soldesMap[op.id] = soldeRun;
+    });
+
+    tableBody.innerHTML = ops.map(op => {
+      const isFutur = op.prospectif && op.dateEcheance && new Date(op.dateEcheance).getTime() > Date.now();
+      const rowClass = op.type === 'recharge' ? 'caisse-recharge' : (isFutur ? 'caisse-prospect caisse-depense' : 'caisse-depense');
+      return `<tr class="${rowClass}">
+        <td>${esc(op.date||'—')}</td>
+        <td><span class="badge" style="background:${op.type==='recharge'?'rgba(39,174,96,.15)':'rgba(231,76,60,.1)'};color:${op.type==='recharge'?'var(--success)':'var(--danger)'}">${op.type==='recharge'?'Recharge':'Dépense'}</span>${isFutur?'<span style="margin-left:4px;font-size:10px;color:var(--warning)">⏳</span>':''}</td>
+        <td>${esc(op.fournisseur||'—')}</td>
+        <td>${esc(op.libelle||'—')}</td>
+        <td class="amount ${op.type==='recharge'?'dafeanne':''}"><strong>${op.type==='recharge'?'+':'-'} ${fmtA(op.montant)}</strong></td>
+        <td class="amount">${fmtA(soldesMap[op.id]||0)}</td>
+        <td>${esc(op.note||'—')}</td>
+        <td><button class="btn btn-danger btn-sm btn-icon" onclick="doDeleteCaisseOp('${op.id}')">🗑️</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error(e); toast('Erreur chargement caisse','error'); }
+}
+
+function openRecharge() {
+  document.getElementById('modal-caisse-title').textContent = '💚 Recharge Caisse';
+  document.getElementById('caisse-op-type').value = 'recharge';
+  document.getElementById('caisse-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('caisse-fournisseur').value = '';
+  document.getElementById('caisse-designation').value = '';
+  document.getElementById('caisse-montant-facture').value = 0;
+  document.getElementById('caisse-montant-paye').value = 0;
+  document.getElementById('caisse-obs').value = '';
+  document.getElementById('caisse-echeance-row').classList.add('hidden');
+  document.getElementById('caisse-echeance').value = '';
+  openModal('modal-caisse');
+}
+
+function openDepense() {
+  document.getElementById('modal-caisse-title').textContent = '🔴 Nouvelle Dépense';
+  document.getElementById('caisse-op-type').value = 'depense';
+  document.getElementById('caisse-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('caisse-fournisseur').value = '';
+  document.getElementById('caisse-designation').value = '';
+  document.getElementById('caisse-montant-facture').value = 0;
+  document.getElementById('caisse-montant-paye').value = 0;
+  document.getElementById('caisse-obs').value = '';
+  document.getElementById('caisse-echeance-row').classList.remove('hidden');
+  document.getElementById('caisse-echeance').value = '';
+  openModal('modal-caisse');
+}
+
+async function saveCaisseOpForm() {
+  const type       = document.getElementById('caisse-op-type').value || 'depense';
+  const fournisseur= document.getElementById('caisse-fournisseur').value.trim();
+  const libelle    = document.getElementById('caisse-designation').value.trim();
+  const montant    = parseFloat(document.getElementById('caisse-montant-paye').value)||0;
+  const note       = document.getElementById('caisse-obs').value.trim();
+  const echeance   = document.getElementById('caisse-echeance').value;
+  const date       = document.getElementById('caisse-date').value || new Date().toISOString().slice(0,10);
+  const prospectif = !!(echeance && new Date(echeance).getTime() > Date.now());
+  if (!libelle || !montant) { toast('Remplissez la désignation et le montant payé','error'); return; }
+  try {
+    await saveCaisseOp({ type, fournisseur, libelle, montant, note, date, prospectif, dateEcheance: echeance || null });
+    closeModal();
+    toast('Opération enregistrée ✓','success');
+    renderCaisse();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function doDeleteCaisseOp(id) {
+  if (!confirm('Supprimer cette opération ?')) return;
+  try {
+    await deleteCaisseOp(id);
+    toast('Opération supprimée','success');
+    renderCaisse();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+// Afficher/masquer champ échéance dans le formulaire caisse
+function toggleProspect(cb) {
+  const row = document.getElementById('caisse-echeance-row');
+  if (row) row.classList.toggle('hidden', !cb.checked);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SUIVI FOURNISSEURS
+// ══════════════════════════════════════════════════════════════
+
+async function renderFournisseurs() {
+  const tableBody = document.getElementById('frs-tbody');
+  if (!tableBody) return;
+  tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px">Chargement…</td></tr>`;
+  try {
+    const list = await getAllFactures();
+    const now  = Date.now();
+    const limit72 = now + 72 * 3600 * 1000;
+
+    // Alertes 72h
+    const alerts = list.filter(f => f.statut !== 'payé' && f.echeance && new Date(f.echeance).getTime() <= limit72 && new Date(f.echeance).getTime() >= now);
+    const notifBar = document.getElementById('frs-notif-bar');
+    if (notifBar) {
+      if (alerts.length) {
+        notifBar.classList.remove('hidden');
+        notifBar.textContent = `⚠️ ${alerts.length} facture(s) arrivent à échéance dans les 72h : ${alerts.map(f=>esc(f.fournisseur)).join(', ')}`;
+      } else notifBar.classList.add('hidden');
+    }
+
+    // Stats dans les cartes HTML existantes
+    const total    = list.reduce((s,f) => s+(f.montant||0), 0);
+    const paye     = list.reduce((s,f) => s+(f.statut==='payé'?(f.montant||0):0), 0);
+    const encours  = list.filter(f => f.statut === 'en cours').length;
+    const el_tot   = document.getElementById('frs-stat-total');
+    const el_due   = document.getElementById('frs-stat-due');
+    const el_enc   = document.getElementById('frs-stat-encours');
+    const el_pay   = document.getElementById('frs-stat-paye');
+    if (el_tot) el_tot.textContent = fmtA(total);
+    if (el_due) el_due.textContent = alerts.length;
+    if (el_enc) el_enc.textContent = encours;
+    if (el_pay) el_pay.textContent = fmtA(paye);
+
+    // Filtre par mois
+    const filtreEl = document.getElementById('frs-filter-month');
+    const filtreMois = filtreEl ? filtreEl.value : '';
+    const filtered = filtreMois
+      ? list.filter(f => (f.dateFacture||'').startsWith(filtreMois))
+      : list;
+
+    if (!filtered.length) {
+      tableBody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+        <div class="empty-icon">🏭</div><h3>Aucune facture</h3>
+        <p>Ajoutez des factures fournisseurs.</p></div></td></tr>`;
+      return;
+    }
+
+    tableBody.innerHTML = filtered.map(f => {
+      const isAlerte = alerts.some(a => a.id === f.id);
+      const badgeClass = f.statut === 'payé' ? 'badge-frs-paye' : isAlerte ? 'badge-frs-alerte' : f.statut === 'en cours' ? 'badge-frs-encours' : 'badge-frs-nonpaye';
+      const statutLbl  = f.statut === 'payé' ? 'Payé' : isAlerte ? '⚠️ Urgent' : f.statut || 'Non payé';
+      return `<tr>
+        <td><strong>${esc(f.fournisseur||'—')}</strong></td>
+        <td>${esc(f.numFacture||'—')}</td>
+        <td>${esc(f.dateFacture||'—')}</td>
+        <td>${esc(f.echeance||'—')}</td>
+        <td class="amount">${fmtA(f.montant)}</td>
+        <td class="amount" style="color:var(--success)">${fmtA(f.montantPaye)}</td>
+        <td><span class="${badgeClass}">${statutLbl}</span></td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="openEditFacture('${f.id}')">✏️</button>
+          <button class="btn btn-outline btn-sm" onclick="openPayFacture('${f.id}')">💳</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="doDeleteFacture('${f.id}')">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error(e); toast('Erreur chargement fournisseurs','error'); }
+}
+
+function openNewFacture() {
+  document.getElementById('facture-id').value = '';
+  ['facture-fournisseur','facture-date','facture-echeance','facture-designation','facture-obs','facture-mode','facture-ref'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('facture-montant').value = 0;
+  document.getElementById('facture-statut').value  = 'non payé';
+  document.getElementById('modal-facture-title').textContent = 'Nouvelle Facture';
+  openModal('modal-facture');
+}
+
+async function openEditFacture(id) {
+  const list = await getAllFactures();
+  const f = list.find(x => x.id === id);
+  if (!f) return;
+  document.getElementById('facture-id').value          = f.id;
+  document.getElementById('facture-fournisseur').value = f.fournisseur || '';
+  document.getElementById('facture-date').value        = f.dateFacture || '';
+  document.getElementById('facture-echeance').value    = f.echeance    || '';
+  document.getElementById('facture-montant').value     = f.montant     || 0;
+  document.getElementById('facture-designation').value = f.designation || '';
+  document.getElementById('facture-statut').value      = f.statut      || 'non payé';
+  document.getElementById('facture-obs').value         = f.note        || '';
+  document.getElementById('modal-facture-title').textContent = 'Modifier Facture';
+  openModal('modal-facture');
+}
+
+async function saveFactureForm() {
+  const id          = document.getElementById('facture-id').value;
+  const fournisseur = document.getElementById('facture-fournisseur').value.trim();
+  const dateFacture = document.getElementById('facture-date').value;
+  const echeance    = document.getElementById('facture-echeance').value;
+  const montant     = parseFloat(document.getElementById('facture-montant').value)||0;
+  const designation = document.getElementById('facture-designation').value.trim();
+  const statut      = document.getElementById('facture-statut').value;
+  const note        = document.getElementById('facture-obs').value.trim();
+  const mode        = document.getElementById('facture-mode').value;
+  const ref         = document.getElementById('facture-ref').value.trim();
+  if (!fournisseur || !montant) { toast('Remplissez fournisseur et montant','error'); return; }
+  try {
+    const existing = id ? (await getAllFactures()).find(f => f.id === id) : null;
+    await saveFacture({ id: id||undefined, fournisseur, dateFacture, echeance, montant, designation, statut, note, mode, ref, montantPaye: existing ? (existing.montantPaye||0) : 0 });
+    closeModal();
+    toast('Facture enregistrée ✓','success');
+    renderFournisseurs();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function openPayFacture(id) {
+  const list = await getAllFactures();
+  const f = list.find(x => x.id === id);
+  if (!f) return;
+  const montant = prompt(`Montant payé pour ${f.fournisseur} (total: ${fmtA(f.montant)}) :`, '0');
+  if (montant === null) return;
+  const val = parseFloat(montant)||0;
+  const nouvPaye = (f.montantPaye||0) + val;
+  const statut   = nouvPaye >= (f.montant||0) ? 'payé' : 'en cours';
+  try {
+    await updateFacture(id, { montantPaye: nouvPaye, statut });
+    toast('Paiement enregistré ✓','success');
+    renderFournisseurs();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+async function doDeleteFacture(id) {
+  if (!confirm('Supprimer cette facture ?')) return;
+  try {
+    await deleteFacture(id);
+    toast('Facture supprimée','success');
+    renderFournisseurs();
+  } catch(e) { toast('Erreur: '+e.message,'error'); }
+}
+
+// Vérification 72h au démarrage
+async function check72hNotifications() {
+  try {
+    const dues = await getUpcomingDue(72);
+    if (dues.length) toast(`⚠️ ${dues.length} facture(s) fournisseur arrivent à échéance dans les 72h !`, 'info');
+  } catch(e) { /* silencieux */ }
 }
 
 // ══════════════════════════════════════════════════════════════

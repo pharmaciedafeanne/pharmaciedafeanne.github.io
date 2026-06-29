@@ -41,27 +41,39 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     LOGIN PAGE
+     LOGIN PAGE — Dark Theme
 ══════════════════════════════════════════════════════════════ -->
 <div id="login-page" class="hidden">
-  <div class="login-card">
-    <div class="login-logo">
-      <div class="logo-icon">💊</div>
-      <div><h1>PHARMACIE DAFEANNE</h1><span>Suivi des Facturations Assurances</span></div>
+  <div class="lp-bg">
+    <div class="lp-card">
+      <div class="lp-logo">💊</div>
+      <div class="lp-title">PHARMA DAFEANNE</div>
+      <div class="lp-subtitle">SYSTÈME DE GESTION PHARMACEUTIQUE</div>
+      <div class="lp-clock" id="lp-clock">00:00:00</div>
+      <div class="lp-date" id="lp-date"></div>
+
+      <div id="login-error" class="lp-error hidden"></div>
+
+      <form id="login-form" autocomplete="off">
+        <div id="login-code-row" class="lp-field">
+          <label>CODE PHARMACIE</label>
+          <input type="text" id="login-code" placeholder="Ex: DAFEANNE" style="text-transform:uppercase">
+        </div>
+        <div class="lp-field">
+          <label>EMAIL</label>
+          <input type="email" id="login-email" placeholder="votre@email.com" autocomplete="email" required>
+        </div>
+        <div class="lp-field">
+          <label>MOT DE PASSE</label>
+          <input type="password" id="login-password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="lp-btn" id="btn-login">ACCÉDER À MA PHARMACIE →</button>
+      </form>
+
+      <div class="lp-links">
+        <a href="#" onclick="toggleAdminLogin();return false;" id="lp-admin-link">🔑 Accès Administrateur</a>
+      </div>
     </div>
-    <p class="login-subtitle">Connectez-vous pour accéder à votre espace</p>
-    <div id="login-error" class="login-error"></div>
-    <form id="login-form">
-      <div class="form-group">
-        <label>Adresse Email</label>
-        <input type="email" id="login-email" placeholder="votre@email.com" autocomplete="email" required>
-      </div>
-      <div class="form-group">
-        <label>Mot de passe</label>
-        <input type="password" id="login-password" autocomplete="current-password" required>
-      </div>
-      <button type="submit" class="btn-login" id="btn-login">Se connecter</button>
-    </form>
   </div>
 </div>
 
@@ -83,9 +95,14 @@
       <div class="nav-item" data-view="quinzaines" onclick="navigate('quinzaines')"><span class="icon">📋</span> Quinzaines</div>
       <div class="nav-item" data-view="nouvelle"   onclick="navigate('nouvelle')"><span class="icon">➕</span> Nouvelle saisie</div>
 
-      <div class="nav-section-label">Données</div>
-      <div class="nav-item" onclick="exportAllPDF()"><span class="icon">📄</span> Exporter tout PDF</div>
-      <div class="nav-item" onclick="exportAllExcel()"><span class="icon">📊</span> Exporter tout Excel</div>
+      <div class="nav-section-label">Finances</div>
+      <div class="nav-item" data-view="inam-amu"   onclick="navigate('inam-amu')"><span class="icon">🏥</span> Suivi INAM/AMU</div>
+      <div class="nav-item" data-view="caisse"     onclick="navigate('caisse')"><span class="icon">💰</span> Petite Caisse</div>
+      <div class="nav-item" data-view="fournisseurs" onclick="navigate('fournisseurs')"><span class="icon">🏪</span> Fournisseurs</div>
+
+      <div class="nav-section-label" id="nav-section-data">Données</div>
+      <div class="nav-item" onclick="exportAllPDF()"><span class="icon">📄</span> Exporter PDF</div>
+      <div class="nav-item" onclick="exportAllExcel()"><span class="icon">📊</span> Exporter Excel</div>
 
       <div class="nav-section-label">Administration</div>
       <div class="nav-item" data-view="import" id="nav-import" onclick="navigate('import')"><span class="icon">📥</span> Importer Excel</div>
@@ -289,8 +306,11 @@
           </div>
         </div>
 
+        <!-- Bannière clôture -->
+        <div id="cloture-banner" class="hidden cloture-banner open" style="margin-top:12px"></div>
+
         <!-- Lots -->
-        <div id="lots-container"></div>
+        <div id="lots-container" style="margin-top:8px"></div>
       </div>
 
       <!-- ── IMPORT EXCEL ───────────────────────────────── -->
@@ -417,6 +437,90 @@
         </div>
       </div>
 
+      <!-- ── SUIVI INAM/AMU ─────────────────────────────── -->
+      <div id="view-inam-amu" class="hidden">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <span class="card-title">🏥 Suivi des Paiements INAM / AMU</span>
+          </div>
+          <div class="inam-summary-row" id="inam-summary"></div>
+        </div>
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th rowspan="2">Quinzaine</th>
+                  <th rowspan="2">Statut</th>
+                  <th colspan="3" class="th-dafeanne">INAM</th>
+                  <th colspan="3" class="th-depot">AMU</th>
+                  <th rowspan="2">Actions</th>
+                </tr>
+                <tr>
+                  <th class="th-dafeanne">Facturé</th><th class="th-dafeanne">Reçu</th><th class="th-dafeanne">Reste</th>
+                  <th class="th-depot">Facturé</th><th class="th-depot">Reçu</th><th class="th-depot">Reste</th>
+                </tr>
+              </thead>
+              <tbody id="inam-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PETITE CAISSE ──────────────────────────────── -->
+      <div id="view-caisse" class="hidden">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <span class="card-title">💰 Petite Caisse</span>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-success" id="btn-recharge-caisse" onclick="openRecharge()">➕ Recharge</button>
+              <button class="btn btn-primary" onclick="openDepense()">💸 Dépense</button>
+            </div>
+          </div>
+          <div class="caisse-solde-bar">
+            <div>Solde actuel : <strong id="caisse-solde" class="amount total">—</strong></div>
+            <div style="font-size:12px;color:var(--text-muted)">Dernière recharge : <span id="caisse-last-recharge">—</span></div>
+          </div>
+        </div>
+        <div id="caisse-notif-bar" class="hidden frs-notif-bar"></div>
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Date</th><th>Type</th><th>Fournisseur</th><th>Désignation</th><th>Montant</th><th>Solde après</th><th>Observations</th><th></th></tr></thead>
+              <tbody id="caisse-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── FOURNISSEURS ───────────────────────────────── -->
+      <div id="view-fournisseurs" class="hidden">
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <div class="frs-stat-card"><div id="frs-stat-total" class="frs-stat-val">0</div><div>Factures totales</div></div>
+          <div class="frs-stat-card" style="border-color:var(--danger)"><div id="frs-stat-due" class="frs-stat-val" style="color:var(--danger)">0</div><div>Échéances &lt;72h</div></div>
+          <div class="frs-stat-card" style="border-color:var(--warning)"><div id="frs-stat-encours" class="frs-stat-val" style="color:var(--warning)">0</div><div>En cours</div></div>
+          <div class="frs-stat-card" style="border-color:var(--success)"><div id="frs-stat-paye" class="frs-stat-val" style="color:var(--success)">0</div><div>Payées</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🏪 Factures Fournisseurs</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select id="frs-filter-month" onchange="renderFournisseurs()" class="filter-select">
+                <option value="">Tous les mois</option>
+              </select>
+              <button class="btn btn-primary" onclick="openNewFacture()">➕ Nouvelle facture</button>
+            </div>
+          </div>
+          <div id="frs-notif-bar" class="hidden frs-notif-bar"></div>
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Date</th><th>Fournisseur</th><th>Désignation</th><th>Montant</th><th>Échéance</th><th>Paiement</th><th>Statut</th><th>Actions</th></tr></thead>
+              <tbody id="frs-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /content-body -->
   </main>
 </div><!-- /app -->
@@ -481,10 +585,137 @@
           </select>
         </div>
       </div>
+      <div class="form-row" style="margin-top:4px">
+        <div class="field">
+          <label style="margin-bottom:8px">Permissions spécifiques</label>
+          <div class="perms-grid">
+            <label class="perm-check"><input type="checkbox" id="perm-cloturer"> Clôturer quinzaine</label>
+            <label class="perm-check"><input type="checkbox" id="perm-rouvrir"> Rouvrir quinzaine</label>
+            <label class="perm-check"><input type="checkbox" id="perm-fournisseurs"> Gérer fournisseurs</label>
+            <label class="perm-check"><input type="checkbox" id="perm-recharge"> Recharger caisse</label>
+            <label class="perm-check"><input type="checkbox" id="perm-import"> Importer Excel</label>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" id="btn-save-user">💾 Enregistrer</button>
+    </div>
+  </div>
+
+  <!-- Modal Paiement INAM/AMU -->
+  <div class="modal modal-sm hidden" id="modal-inam-pay">
+    <div class="modal-header">
+      <h3>💳 Enregistrer un paiement</h3>
+      <button class="btn-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="inam-pay-id">
+      <div style="font-weight:600;margin-bottom:12px;color:var(--primary)" id="inam-pay-lbl"></div>
+      <div class="form-row cols-2">
+        <div class="field"><label>INAM reçu (F)</label><input type="number" id="inam-pay-inam" min="0" value="0"></div>
+        <div class="field"><label>AMU reçu (F)</label><input type="number" id="inam-pay-amu" min="0" value="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Date de virement</label><input type="date" id="inam-pay-date"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-success" onclick="saveInamPay()">💾 Enregistrer</button>
+    </div>
+  </div>
+
+  <!-- Modal Recharge / Dépense Caisse -->
+  <div class="modal modal-sm hidden" id="modal-caisse">
+    <div class="modal-header">
+      <h3 id="modal-caisse-title">💰 Opération Caisse</h3>
+      <button class="btn-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="caisse-op-id">
+      <input type="hidden" id="caisse-op-type">
+      <div class="form-row cols-2">
+        <div class="field"><label>Date *</label><input type="date" id="caisse-date" required></div>
+        <div class="field" id="caisse-echeance-row"><label>Échéance (si prospectif)</label><input type="date" id="caisse-echeance"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Fournisseur / Source</label><input type="text" id="caisse-fournisseur" placeholder="Nom…"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Désignation *</label><input type="text" id="caisse-designation" required placeholder="Description de l'opération…"></div>
+      </div>
+      <div class="form-row cols-2">
+        <div class="field"><label>Montant facturé (F)</label><input type="number" id="caisse-montant-facture" min="0" value="0"></div>
+        <div class="field"><label>Montant payé (F) *</label><input type="number" id="caisse-montant-paye" min="0" value="0" required></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Observations</label><textarea id="caisse-obs" rows="2"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveCaisseOpForm()">💾 Enregistrer</button>
+    </div>
+  </div>
+
+  <!-- Modal Facture Fournisseur -->
+  <div class="modal modal-md hidden" id="modal-facture">
+    <div class="modal-header">
+      <h3 id="modal-facture-title">🏪 Facture Fournisseur</h3>
+      <button class="btn-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="facture-id">
+      <div class="form-row cols-2">
+        <div class="field"><label>Date facture *</label><input type="date" id="facture-date" required></div>
+        <div class="field"><label>Échéance *</label><input type="date" id="facture-echeance" required></div>
+      </div>
+      <div class="form-row cols-2">
+        <div class="field"><label>Fournisseur *</label><input type="text" id="facture-fournisseur" list="frs-list" required></div>
+        <div class="field"><label>Montant (F) *</label><input type="number" id="facture-montant" min="0" required></div>
+      </div>
+      <datalist id="frs-list"></datalist>
+      <div class="form-row">
+        <div class="field"><label>Désignation</label><input type="text" id="facture-designation"></div>
+      </div>
+      <div class="form-row cols-2">
+        <div class="field">
+          <label>Mode de paiement</label>
+          <select id="facture-mode">
+            <option value="">—</option>
+            <option value="Chèque barré">Chèque barré</option>
+            <option value="Chèque non barré">Chèque non barré</option>
+            <option value="TMoney">TMoney</option>
+            <option value="Orange Money">Orange Money</option>
+            <option value="Virement bancaire">Virement bancaire</option>
+            <option value="Espèces">Espèces</option>
+          </select>
+        </div>
+        <div class="field"><label>N° Chèque / Référence</label><input type="text" id="facture-ref"></div>
+      </div>
+      <div class="form-row cols-2">
+        <div class="field">
+          <label>Statut</label>
+          <select id="facture-statut">
+            <option value="non payé">Non payé</option>
+            <option value="en cours">En cours</option>
+            <option value="payé">Payé</option>
+          </select>
+        </div>
+        <div class="field"><label>Date paiement</label><input type="date" id="facture-date-paye"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Observations</label><textarea id="facture-obs" rows="2"></textarea></div>
+      </div>
+      <div class="form-row">
+        <label class="perm-check"><input type="checkbox" id="facture-prospective"> Dépense prospective (échéance future)</label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveFactureForm()">💾 Enregistrer</button>
     </div>
   </div>
 

@@ -226,3 +226,111 @@ async function updateUserProfile(uid, data) {
 async function deleteUserProfile(uid) {
   await getDB().collection(COLLECTIONS.USERS).doc(uid).delete();
 }
+
+// ── Suivi INAM / AMU ─────────────────────────────────────────────────
+
+function inamRef(pharmacieId) {
+  const pid = pharmacieId || _currentPharmacieId;
+  return getDB().collection(COLLECTIONS.PHARMACIES).doc(pid).collection('inam_amu');
+}
+
+async function saveSuiviInamAmu(data) {
+  const ref = data.id ? inamRef().doc(data.id) : inamRef().doc();
+  const id = ref.id;
+  await ref.set({ ...data, id, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  return id;
+}
+
+async function getAllSuiviInamAmu() {
+  const snap = await inamRef().get();
+  const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  list.sort((a, b) => {
+    const ka = a.periodKey || '';
+    const kb = b.periodKey || '';
+    return kb.localeCompare(ka);
+  });
+  return list;
+}
+
+async function updateSuiviInamAmu(id, data) {
+  await inamRef().doc(id).update({ ...data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+async function deleteSuiviInamAmu(id) {
+  await inamRef().doc(id).delete();
+}
+
+// ── Petite Caisse ────────────────────────────────────────────────────
+
+function caisseRef(pharmacieId) {
+  const pid = pharmacieId || _currentPharmacieId;
+  return getDB().collection(COLLECTIONS.PHARMACIES).doc(pid).collection('caisse');
+}
+
+async function saveCaisseOp(data) {
+  const ref = data.id ? caisseRef().doc(data.id) : caisseRef().doc();
+  const id = ref.id;
+  await ref.set({ ...data, id, createdAt: data.createdAt || firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  return id;
+}
+
+async function getAllCaisseOps() {
+  const snap = await caisseRef().get();
+  const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  list.sort((a, b) => {
+    const da = a.date || '';
+    const db = b.date || '';
+    return db.localeCompare(da);
+  });
+  return list;
+}
+
+async function deleteCaisseOp(id) {
+  await caisseRef().doc(id).delete();
+}
+
+// ── Suivi Fournisseurs ───────────────────────────────────────────────
+
+function facturesRef(pharmacieId) {
+  const pid = pharmacieId || _currentPharmacieId;
+  return getDB().collection(COLLECTIONS.PHARMACIES).doc(pid).collection('factures');
+}
+
+async function saveFacture(data) {
+  const ref = data.id ? facturesRef().doc(data.id) : facturesRef().doc();
+  const id = ref.id;
+  await ref.set({ ...data, id, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  return id;
+}
+
+async function getAllFactures() {
+  const snap = await facturesRef().get();
+  const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  list.sort((a, b) => {
+    const da = a.dateFacture || '';
+    const db = b.dateFacture || '';
+    return db.localeCompare(da);
+  });
+  return list;
+}
+
+async function updateFacture(id, data) {
+  await facturesRef().doc(id).update({ ...data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+async function deleteFacture(id) {
+  await facturesRef().doc(id).delete();
+}
+
+// Retourne les factures dont l'échéance est dans les prochaines `hours` heures
+async function getUpcomingDue(hours) {
+  const now = Date.now();
+  const limit = now + hours * 3600 * 1000;
+  const all = await getAllFactures();
+  return all.filter(f => {
+    if (f.statut === 'payé') return false;
+    if (!f.echeance) return false;
+    const ts = new Date(f.echeance).getTime();
+    return ts >= now && ts <= limit;
+  });
+}

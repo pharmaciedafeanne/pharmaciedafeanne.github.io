@@ -365,6 +365,26 @@ async function renderQuinzaines() {
 //  DÉTAIL QUINZAINE
 // ══════════════════════════════════════════════════════════════
 
+async function openEditPeriod(key) {
+  if (!key) return;
+  try {
+    const snap = await getQuinzaineDocRef(key).get();
+    if (!snap.exists) { toast('Quinzaine introuvable','error'); return; }
+    const period = snap.data();
+    // Charger en mode édition
+    _saisieEntite = period.entite || 'INAM';
+    _lots = period.lots || [];
+    document.getElementById('new-year').value = period.year || '';
+    document.getElementById('new-month').value = period.month || '';
+    document.getElementById('new-quinzaine').value = period.quinzaine || '';
+    document.getElementById('form-nouvelle').reset();
+    navigate('nouvelle');
+    renderLotsBuilder();
+    _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
+    toast('Quinzaine chargée pour modification ✓', 'info');
+  } catch(e) { toast('Erreur chargement: '+e.message,'error'); }
+}
+
 async function renderDetail(key) {
   if (!key) { navigate('quinzaines'); return; }
   const lotsEl = document.getElementById('lots-container');
@@ -396,7 +416,10 @@ async function renderDetail(key) {
            ${canReopen ? `<button class="btn-rouvrir" onclick="doRouvrirQuinzaine('${key}')">🔓 Rouvrir</button>` : ''}
          </div>`
       : `<span>🟢 Quinzaine <strong>ouverte</strong></span>
-         ${canClose ? `<button class="btn-cloturer" onclick="doCloturerQuinzaine('${key}')">🔒 Clôturer</button>` : ''}`;
+         <div style="display:flex;gap:8px;align-items:center">
+           <button class="btn btn-primary btn-sm" onclick="openEditPeriod('${key}')">✏️ Modifier</button>
+           ${canClose ? `<button class="btn-cloturer" onclick="doCloturerQuinzaine('${key}')">🔒 Clôturer</button>` : ''}
+         </div>`;
     clotureBanner.classList.remove('hidden');
   }
 

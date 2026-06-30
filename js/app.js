@@ -824,7 +824,7 @@ function addLot() {
   const n = _lots.length + 1;
   _lots.push({ numero: n, entite, bons: [] });
   addBon(n); // premier bon automatique
-  renderLotsBuilder();
+  rerenderLotsBuilder();
   setTimeout(() => {
     const builder = document.getElementById('lots-builder');
     if (builder && builder.lastElementChild) {
@@ -908,6 +908,87 @@ function lotHeaderLabel(lot) {
     ? `<span style="font-weight:400;font-size:12px;margin-left:6px;${countColor}">(${nb}/10 bons${full?' — COMPLET ⚠️':''})</span>`
     : '';
   return `LOT N°${lot.numero}${badge}${count}`;
+}
+
+// Wrapper : rerendre les lots dans le bon conteneur
+function rerenderLotsBuilder() {
+  if (_detailEditingKey) {
+    renderDetailEditLotsBuilder();
+  } else {
+    renderLotsBuilder();
+  }
+}
+
+// Rerender pour la vue detail en édition
+function renderDetailEditLotsBuilder() {
+  const c = document.getElementById('lots-container');
+  if (!c) return;
+
+  let html = '';
+  const entiteColor = _saisieEntite === 'INAM' ? 'var(--primary)' : 'var(--success)';
+  html += `<div style="background:${entiteColor}15;border:1px solid ${entiteColor}40;border-radius:8px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:18px">${_saisieEntite==='INAM'?'🏥':'💊'}</span>
+    <strong style="color:${entiteColor}">Modification — Saisie ${_saisieEntite}</strong>
+  </div>`;
+
+  if (!_lots.length) {
+    html += `<div style="padding:20px;text-align:center;color:var(--text-muted)">
+      <div style="font-size:40px;margin-bottom:8px">📦</div>
+      <p style="margin-bottom:16px">Aucun lot.</p>
+    </div>`;
+  } else {
+    _lots.forEach(lot => {
+      const e = lot.entite;
+      const complet = lot.bons.length >= 10;
+      html += `
+      <div class="lot-card" style="margin-bottom:14px">
+        <div class="lot-header" style="cursor:default;justify-content:space-between">
+          <h4>${lotHeaderLabel(lot)}</h4>
+          <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer le lot</button>
+        </div>
+        <div class="lot-body open">
+          <table class="bons-table">
+            <thead><tr>
+              <th style="width:110px">BON</th>
+              <th class="th-dafeanne">💊 DAFEANNE ${e} (F)</th>
+              <th class="th-depot">🏪 DÉPÔT ${e} (F)</th>
+              <th>OBSERVATION</th>
+              <th style="width:36px"></th>
+            </tr></thead>
+            <tbody id="bon-rows-${lot.numero}">
+              ${lot.bons.map(bon => bonRow(lot.numero, bon, e)).join('')}
+            </tbody>
+            <tfoot><tr class="lot-total-row">
+              <td><strong>SOUS-TOTAL LOT ${lot.numero} — ${e}</strong></td>
+              <td class="amount th-dafeanne" id="st-${lot.numero}-df">0</td>
+              <td class="amount th-depot"    id="st-${lot.numero}-dp">0</td>
+              <td class="amount" colspan="2">Total : <strong id="st-${lot.numero}-total" style="color:var(--primary)">0</strong> F</td>
+            </tr></tfoot>
+          </table>
+          <div style="padding:12px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            ${complet
+              ? `<span style="color:var(--danger);font-size:12px;font-weight:600">⚠️ Lot complet (10/10)</span>`
+              : `<button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ 1 bon</button>
+                 <button class="btn btn-outline btn-sm" onclick="add10Bons(${lot.numero})">➕ 10 bons</button>`
+            }
+            <button class="btn btn-primary btn-sm" onclick="addLot()">➕ Lot suivant →</button>
+          </div>
+        </div>
+      </div>`;
+    });
+  }
+
+  html += `<div style="padding:12px;margin-top:4px">
+    <button class="btn btn-primary" style="width:100%;padding:12px;font-size:15px" onclick="addLot()">➕ Ajouter un lot</button>
+  </div>`;
+
+  html += `<div style="padding:20px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border);margin-top:20px">
+    <button class="btn btn-outline" onclick="navigate('quinzaines')">Annuler</button>
+    <button class="btn btn-success" onclick="saveDetailEdit('${_detailEditingKey}')">💾 Enregistrer</button>
+  </div>`;
+
+  c.innerHTML = html;
+  _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
 }
 
 function renderLotsBuilder() {
@@ -1159,8 +1240,8 @@ function removeLot(num) {
   if (!confirm(`Supprimer le LOT N°${num} et tous ses bons ?`)) return;
   _lots = _lots.filter(l => l.numero !== num);
   _lots.forEach((l, i) => l.numero = i + 1);
-  renderLotsBuilder();
-  autoSaveDraft();
+  rerenderLotsBuilder();
+  if (!_detailEditingKey) autoSaveDraft();
 }
 
 async function saveNouvelle() {

@@ -145,6 +145,7 @@ async function getAllPeriods() {
   const snap = await quinzainesRef().get();
   return snap.docs
     .map(d => ({ key: d.id, ...d.data() }))
+    .filter(p => !p.brouillon) // exclure les brouillons non finalisés
     .sort((a, b) => b.year - a.year || b.month - a.month || b.quinzaine.localeCompare(a.quinzaine));
 }
 

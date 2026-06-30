@@ -896,53 +896,122 @@ function bonRow(lotNum, bon, entite) {
   </tr>`;
 }
 
-// ── Préenregistrement (auto-save localStorage) ───────────────────────
+// ── Préenregistrement automatique — Firestore + localStorage ─────────
 let _autoSaveTimer = null;
-function _draftKey() { return `draft_saisie_${_currentPharmacieId||'local'}`; }
+let _autoSaveFirestoreTimer = null;
+let _currentDraftKey = null; // clé Firestore du brouillon en cours
+
+function _showDraftIndicator(msg) {
+  const ind = document.getElementById('draft-indicator');
+  if (!ind) return;
+  ind.textContent = msg;
+  ind.style.opacity = '1';
+  setTimeout(() => { ind.style.opacity = '.4'; }, 2500);
+}
+
+function _getDraftFields() {
+  return {
+    year:      parseInt(document.getElementById('new-year')?.value) || null,
+    month:     parseInt(document.getElementById('new-month')?.value) || null,
+    quinzaine: document.getElementById('new-quinzaine')?.value || null,
+  };
+}
+
+// Sauvegarde locale (localStorage) — rapide, après chaque frappe
+function _saveLocalDraft() {
+  try {
+    const f = _getDraftFields();
+    if (!f.year || !f.month || !f.quinzaine || !_lots.length) return;
+    const draft = { ...f, entite: _saisieEntite, lots: _lots, savedAt: Date.now() };
+    localStorage.setItem(`draft_${_currentPharmacieId}`, JSON.stringify(draft));
+  } catch(e) {}
+}
+
+// Sauvegarde Firestore — synchronisée, toutes les 20s si données valides
+async function _saveFirestoreDraft() {
+  try {
+    const f = _getDraftFields();
+    if (!f.year || !f.month || !f.quinzaine || !_saisieEntite || !_lots.length) return;
+    const key = periodKey(f.year, f.month, f.quinzaine, _saisieEntite);
+    _currentDraftKey = key;
+    const period = recalcPeriod({ ...f, entite: _saisieEntite, lots: _lots, brouillon: true });
+    period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    if (!period.createdAt) period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    await quinzainesRef().doc(key).set(period, { merge: true });
+    _showDraftIndicator('💾 Préenregistré ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}));
+  } catch(e) { /* silencieux */ }
+}
 
 function autoSaveDraft() {
+  // Sauvegarde locale immédiate (1,5s debounce)
   clearTimeout(_autoSaveTimer);
-  _autoSaveTimer = setTimeout(() => {
-    try {
-      const year      = document.getElementById('new-year')?.value;
-      const month     = document.getElementById('new-month')?.value;
-      const quinzaine = document.getElementById('new-quinzaine')?.value;
-      if (!year || !month || !quinzaine || !_lots.length) return;
-      const draft = { year, month, quinzaine, entite: _saisieEntite, lots: _lots, savedAt: Date.now() };
-      localStorage.setItem(_draftKey(), JSON.stringify(draft));
-      // Indicateur discret
-      const ind = document.getElementById('draft-indicator');
-      if (ind) { ind.textContent = '💾 Préenregistré ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); ind.style.opacity='1'; setTimeout(()=>{ ind.style.opacity='.4'; }, 2000); }
-    } catch(e) {}
-  }, 1500); // délai 1,5s après la dernière frappe
+  _autoSaveTimer = setTimeout(_saveLocalDraft, 1500);
+  // Sauvegarde Firestore différée (20s debounce)
+  clearTimeout(_autoSaveFirestoreTimer);
+  _autoSaveFirestoreTimer = setTimeout(_saveFirestoreDraft, 20000);
 }
 
-function clearDraft() {
-  try { localStorage.removeItem(_draftKey()); } catch(e) {}
+async function clearDraft() {
+  try { localStorage.removeItem(`draft_${_currentPharmacieId}`); } catch(e) {}
+  // Supprimer le brouillon Firestore (on supprime le flag brouillon à l'enregistrement final)
+  if (_currentDraftKey) {
+    try { await quinzainesRef().doc(_currentDraftKey).update({ brouillon: false }); } catch(e) {}
+    _currentDraftKey = null;
+  }
 }
 
-function restoreDraft() {
+async function restoreDraft() {
+  if (_bisMode) return false;
   try {
-    const raw = localStorage.getItem(_draftKey());
+    // 1. Vérifier d'abord Firestore (source de vérité)
+    const snap = await quinzainesRef().where('brouillon','==',true).limit(5).get();
+    if (!snap.empty) {
+      const drafts = snap.docs.map(d => ({ key: d.id, ...d.data() }));
+      // Trier par updatedAt desc
+      drafts.sort((a,b) => {
+        const ta = a.updatedAt ? a.updatedAt.seconds : 0;
+        const tb = b.updatedAt ? b.updatedAt.seconds : 0;
+        return tb - ta;
+      });
+      const d = drafts[0];
+      const MOIS = ['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+      const label = `${d.entite||''} — ${d.quinzaine||''} ${MOIS[d.month]||''} ${d.year||''}`;
+      const ok = confirm(`Un brouillon non finalisé a été trouvé sur le serveur :\n${label}\n\nVoulez-vous reprendre cette saisie ?`);
+      if (!ok) {
+        // Marquer comme non-brouillon pour ne plus proposer
+        await quinzainesRef().doc(d.key).update({ brouillon: false });
+        localStorage.removeItem(`draft_${_currentPharmacieId}`);
+        return false;
+      }
+      _currentDraftKey = d.key;
+      _saisieEntite = d.entite || null;
+      _lots = d.lots || [];
+      document.getElementById('new-year').value  = d.year  || '';
+      document.getElementById('new-month').value = d.month || '';
+      document.getElementById('new-quinzaine').value = d.quinzaine || '';
+      renderLotsBuilder();
+      _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
+      toast('Brouillon serveur restauré ✓', 'success');
+      return true;
+    }
+    // 2. Fallback localStorage
+    const raw = localStorage.getItem(`draft_${_currentPharmacieId}`);
     if (!raw) return false;
     const draft = JSON.parse(raw);
     if (!draft.lots || !draft.lots.length) return false;
     const age = Math.round((Date.now() - draft.savedAt) / 60000);
     const ageLabel = age < 60 ? `il y a ${age} min` : `il y a ${Math.round(age/60)}h`;
-    const ok = confirm(`Un brouillon de saisie a été trouvé (${draft.entite||''} ${draft.quinzaine||''} — sauvegardé ${ageLabel}).\n\nVoulez-vous le restaurer ?`);
-    if (!ok) { clearDraft(); return false; }
-    // Restaurer les champs
-    const yEl = document.getElementById('new-year');
-    const mEl = document.getElementById('new-month');
-    const qEl = document.getElementById('new-quinzaine');
-    if (yEl) yEl.value = draft.year;
-    if (mEl) mEl.value = draft.month;
-    if (qEl) qEl.value = draft.quinzaine;
+    const MOIS = ['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+    const ok = confirm(`Un brouillon local a été trouvé (${draft.entite||''} ${draft.quinzaine||''} ${MOIS[draft.month]||''} — ${ageLabel}).\n\nVoulez-vous le restaurer ?`);
+    if (!ok) { localStorage.removeItem(`draft_${_currentPharmacieId}`); return false; }
     _saisieEntite = draft.entite || null;
     _lots = draft.lots || [];
+    document.getElementById('new-year').value  = draft.year  || '';
+    document.getElementById('new-month').value = draft.month || '';
+    document.getElementById('new-quinzaine').value = draft.quinzaine || '';
     renderLotsBuilder();
     _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
-    toast('Brouillon restauré ✓', 'success');
+    toast('Brouillon local restauré ✓', 'success');
     return true;
   } catch(e) { return false; }
 }
@@ -997,7 +1066,7 @@ async function saveNouvelle() {
       const key = getBisKey(_bisMode.parentKey, _bisMode.entite);
       const existing = await getQuinzaineDocRef(key).get();
       if (existing.exists) { toast(`Une saisie BIS ${_bisMode.entite} existe déjà pour cette quinzaine.`, 'error'); return; }
-      await savePeriod({ year, month, quinzaine, entite: _bisMode.entite, entiteBis: _bisMode.entite, parentKey: _bisMode.parentKey, lots: _lots, _key: key });
+      await savePeriod({ year, month, quinzaine, entite: _bisMode.entite, entiteBis: _bisMode.entite, parentKey: _bisMode.parentKey, lots: _lots, brouillon: false, _key: key });
       toast(`Saisie BIS ${_bisMode.entite} enregistrée ✓`, 'success');
       logAction(`Saisie BIS ${_bisMode.entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
       _bisMode = null;
@@ -1007,7 +1076,7 @@ async function saveNouvelle() {
       if (!entite) { toast('Choisissez l\'entité (INAM ou AMU) avant d\'enregistrer.', 'error'); return; }
       const existing = await getPeriod(year, month, quinzaine, entite);
       if (existing) { toast(`La quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} existe déjà.`, 'error'); return; }
-      await savePeriod({ year, month, quinzaine, entite, lots: _lots });
+      await savePeriod({ year, month, quinzaine, entite, lots: _lots, brouillon: false });
       toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} enregistrée ✓`, 'success');
       logAction(`Nouvelle quinzaine ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
     }

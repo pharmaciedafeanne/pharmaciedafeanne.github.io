@@ -314,47 +314,60 @@ async function renderQuinzaines() {
       bisMap[p.parentKey].push(p);
     });
 
+    const actionBtns = (key) => `
+      <button class="btn btn-primary btn-sm" onclick="navigate('detail',{key:'${key}'})">📋</button>
+      <button class="btn btn-outline btn-sm" onclick="doExportPDF('${key}')">PDF</button>
+      <button class="btn btn-outline btn-sm" onclick="doExportExcel('${key}')">Excel</button>
+      <button class="btn btn-danger btn-sm btn-icon" onclick="doDeletePeriod('${key}')">🗑️</button>`;
+
     tbody.innerHTML = normales.map(p => {
+      const T  = p.totaux || {};
+      const df = T.dafeanne || {}; const dp = T.depot || {};
+      const qBadge = `<span class="badge badge-${p.quinzaine==='Q1'?'q1':'q2'}">${p.quinzaine==='Q1'?'1ère Q.':'2ème Q.'}</span>`;
+      const periode = `<strong>${MOIS_APP[p.month]} ${p.year}</strong>`;
+
+      // Lots INAM et AMU de cette quinzaine
+      const lotsInam = (p.lots||[]).filter(l => !l.entite || l.entite==='INAM');
+      const lotsAmu  = (p.lots||[]).filter(l => !l.entite || l.entite==='AMU');
+
+      // Facture INAM
+      const rowInam = `<tr style="border-left:3px solid var(--primary)">
+        <td rowspan="2">${periode}<br><small style="opacity:.6">${p.key}</small></td>
+        <td>${qBadge} <span class="badge badge-q1" style="margin-left:4px">INAM</span></td>
+        <td>${lotsInam.length}</td>
+        <td class="amount dafeanne">${fmtA(df.inam)}</td>
+        <td class="amount depot">${fmtA(dp.inam)}</td>
+        <td class="amount total"><strong>${fmtA((df.inam||0)+(dp.inam||0))}</strong></td>
+        <td><div style="display:flex;gap:4px">${actionBtns(p.key)}</div></td>
+      </tr>`;
+
+      // Facture AMU
+      const rowAmu = `<tr style="border-left:3px solid var(--success);background:rgba(0,184,148,.04)">
+        <td>${qBadge} <span class="badge badge-q2" style="margin-left:4px">AMU</span></td>
+        <td>${lotsAmu.length}</td>
+        <td class="amount dafeanne">${fmtA(df.amu)}</td>
+        <td class="amount depot">${fmtA(dp.amu)}</td>
+        <td class="amount total"><strong>${fmtA((df.amu||0)+(dp.amu||0))}</strong></td>
+        <td></td>
+      </tr>`;
+
+      // BIS
       const bisRows = (bisMap[p.key] || []).map(b => {
         const color = b.entiteBis === 'INAM' ? 'var(--primary)' : 'var(--success)';
+        const Tb = b.totaux||{}; const dfb=Tb.dafeanne||{}; const dpb=Tb.depot||{};
+        const entiteField = (b.entiteBis||'').toLowerCase();
         return `<tr style="background:${color}08;border-left:3px solid ${color}">
-          <td style="padding-left:24px;opacity:.8">↳ BIS ${b.entiteBis}</td>
-          <td><span class="badge" style="background:${color};color:white">${b.entiteBis} BIS</span></td>
+          <td style="padding-left:20px;opacity:.8">↳ ${MOIS_APP[b.month]} ${b.year}</td>
+          <td>${qBadge} <span class="badge" style="background:${color};color:white">${b.entiteBis} BIS</span></td>
           <td>${(b.lots||[]).length}</td>
-          <td class="amount dafeanne">${fmtA(b.totaux&&b.totaux.dafeanne&&b.totaux.dafeanne.inam)}</td>
-          <td class="amount dafeanne">${fmtA(b.totaux&&b.totaux.dafeanne&&b.totaux.dafeanne.amu)}</td>
-          <td class="amount depot">${fmtA(b.totaux&&b.totaux.depot&&b.totaux.depot.inam)}</td>
-          <td class="amount depot">${fmtA(b.totaux&&b.totaux.depot&&b.totaux.depot.amu)}</td>
-          <td class="amount total">${fmtA(b.totaux&&b.totaux.global)}</td>
-          <td>
-            <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <button class="btn btn-primary btn-sm" onclick="navigate('detail',{key:'${b.key}'})">📋</button>
-              <button class="btn btn-outline btn-sm" onclick="doExportPDF('${b.key}')">PDF</button>
-              <button class="btn btn-outline btn-sm" onclick="doExportExcel('${b.key}')">Excel</button>
-              <button class="btn btn-danger btn-sm btn-icon" onclick="doDeletePeriod('${b.key}')">🗑️</button>
-            </div>
-          </td>
+          <td class="amount dafeanne">${fmtA(dfb[entiteField])}</td>
+          <td class="amount depot">${fmtA(dpb[entiteField])}</td>
+          <td class="amount total">${fmtA(Tb.global)}</td>
+          <td><div style="display:flex;gap:4px">${actionBtns(b.key)}</div></td>
         </tr>`;
       }).join('');
 
-      return `<tr>
-        <td><strong>${MOIS_APP[p.month]} ${p.year}</strong></td>
-        <td><span class="badge badge-${p.quinzaine==='Q1'?'q1':'q2'}">${p.quinzaine==='Q1'?'1ère Q.':'2ème Q.'}</span>${p.bis?'<span class="badge" style="background:#f39c12;color:white;margin-left:4px">BIS</span>':''}</td>
-        <td>${(p.lots||[]).length}</td>
-        <td class="amount dafeanne">${fmtA(p.totaux&&p.totaux.dafeanne&&p.totaux.dafeanne.inam)}</td>
-        <td class="amount dafeanne">${fmtA(p.totaux&&p.totaux.dafeanne&&p.totaux.dafeanne.amu)}</td>
-        <td class="amount depot">${fmtA(p.totaux&&p.totaux.depot&&p.totaux.depot.inam)}</td>
-        <td class="amount depot">${fmtA(p.totaux&&p.totaux.depot&&p.totaux.depot.amu)}</td>
-        <td class="amount total">${fmtA(p.totaux&&p.totaux.global)}</td>
-        <td>
-          <div style="display:flex;gap:5px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" onclick="navigate('detail',{key:'${p.key}'})">📋</button>
-            <button class="btn btn-outline btn-sm" onclick="doExportPDF('${p.key}')">PDF</button>
-            <button class="btn btn-outline btn-sm" onclick="doExportExcel('${p.key}')">Excel</button>
-            <button class="btn btn-danger btn-sm btn-icon" onclick="doDeletePeriod('${p.key}')">🗑️</button>
-          </div>
-        </td>
-      </tr>${bisRows}`;
+      return rowInam + rowAmu + bisRows;
     }).join('');
   } catch(e) { console.error(e); toast('Erreur chargement','error'); }
 }
@@ -922,14 +935,14 @@ async function saveNouvelle() {
       // Saisie BIS entité
       const key = getBisKey(_bisMode.parentKey, _bisMode.entite);
       const existing = await getQuinzaineDocRef(key).get();
-      if (existing.exists && !confirm(`Une saisie BIS ${_bisMode.entite} existe déjà. Écraser ?`)) return;
+      if (existing.exists) { toast(`Une saisie BIS ${_bisMode.entite} existe déjà pour cette quinzaine.`, 'error'); return; }
       await savePeriod({ year, month, quinzaine, bis: true, entiteBis: _bisMode.entite, parentKey: _bisMode.parentKey, lots: _lots, _key: key });
       toast(`Saisie BIS ${_bisMode.entite} enregistrée ✓`, 'success');
       logAction(`Saisie BIS ${_bisMode.entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
       _bisMode = null;
     } else {
       const existing = await getPeriod(year, month, quinzaine, bisCheck);
-      if (existing && !confirm(`Cette quinzaine existe déjà. Écraser ?`)) return;
+      if (existing) { toast(`Cette quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} existe déjà. Supprimez-la d'abord si vous souhaitez la recréer.`, 'error'); return; }
       await savePeriod({ year, month, quinzaine, bis: bisCheck, lots: _lots });
       toast(`Quinzaine ${quinzaine}${bisCheck?' BIS':''} ${MOIS_APP[month]} ${year} enregistrée ✓`, 'success');
       logAction('Nouvelle quinzaine', `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');

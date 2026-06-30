@@ -760,10 +760,10 @@ function renderLotsBuilder() {
             </table>
             <div style="padding:12px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               ${complet
-                ? `<span style="color:var(--danger);font-size:12px;font-weight:600">⚠️ Lot complet (10/10)</span>
-                   <button class="btn btn-primary btn-sm" onclick="addLot()">➕ Lot suivant →</button>`
+                ? `<span style="color:var(--danger);font-size:12px;font-weight:600">⚠️ Lot complet (10/10)</span>`
                 : `<button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ Ajouter un bon</button>`
               }
+              <button class="btn btn-primary btn-sm" onclick="addLot()">➕ Lot suivant →</button>
             </div>
           </div>
         </div>`;

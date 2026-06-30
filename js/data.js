@@ -46,8 +46,8 @@ function recalcPeriod(period) {
   return period;
 }
 
-function periodKey(year, month, quinzaine, bis) {
-  return `${year}-${String(month).padStart(2,'0')}-${quinzaine}${bis ? '-BIS' : ''}`;
+function periodKey(year, month, quinzaine, entite) {
+  return `${year}-${String(month).padStart(2,'0')}-${quinzaine}-${(entite||'INAM').toUpperCase()}`;
 }
 
 function getBisKey(parentKey, entite) {
@@ -128,7 +128,7 @@ async function migrateRootQuinzaines() {
 
 async function savePeriod(period) {
   period = recalcPeriod(period);
-  const key = period._key || periodKey(period.year, period.month, period.quinzaine, period.bis);
+  const key = period._key || periodKey(period.year, period.month, period.quinzaine, period.entite);
   delete period._key;
   period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (!period.createdAt) period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
@@ -136,8 +136,8 @@ async function savePeriod(period) {
   return { key, ...period };
 }
 
-async function getPeriod(year, month, quinzaine, bis) {
-  const doc = await quinzainesRef().doc(periodKey(year, month, quinzaine, bis)).get();
+async function getPeriod(year, month, quinzaine, entite) {
+  const doc = await quinzainesRef().doc(periodKey(year, month, quinzaine, entite)).get();
   return doc.exists ? { key: doc.id, ...doc.data() } : null;
 }
 

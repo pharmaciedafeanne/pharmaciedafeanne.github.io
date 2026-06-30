@@ -323,51 +323,40 @@ async function renderQuinzaines() {
     tbody.innerHTML = normales.map(p => {
       const T  = p.totaux || {};
       const df = T.dafeanne || {}; const dp = T.depot || {};
+      const entite = p.entite || 'INAM';
+      const ef = entite.toLowerCase();
+      const color = entite === 'INAM' ? 'var(--primary)' : 'var(--success)';
       const qBadge = `<span class="badge badge-${p.quinzaine==='Q1'?'q1':'q2'}">${p.quinzaine==='Q1'?'1ère Q.':'2ème Q.'}</span>`;
-      const periode = `<strong>${MOIS_APP[p.month]} ${p.year}</strong>`;
+      const eBadge = `<span class="badge" style="background:${color};color:white;margin-left:4px">${entite}</span>`;
+      const dfVal = df[ef] || 0;
+      const dpVal = dp[ef] || 0;
 
-      // Lots INAM et AMU de cette quinzaine
-      const lotsInam = (p.lots||[]).filter(l => !l.entite || l.entite==='INAM');
-      const lotsAmu  = (p.lots||[]).filter(l => !l.entite || l.entite==='AMU');
-
-      // Facture INAM
-      const rowInam = `<tr style="border-left:3px solid var(--primary)">
-        <td rowspan="2">${periode}<br><small style="opacity:.6">${p.key}</small></td>
-        <td>${qBadge} <span class="badge badge-q1" style="margin-left:4px">INAM</span></td>
-        <td>${lotsInam.length}</td>
-        <td class="amount dafeanne">${fmtA(df.inam)}</td>
-        <td class="amount depot">${fmtA(dp.inam)}</td>
-        <td class="amount total"><strong>${fmtA((df.inam||0)+(dp.inam||0))}</strong></td>
-        <td><div style="display:flex;gap:4px">${actionBtns(p.key)}</div></td>
-      </tr>`;
-
-      // Facture AMU
-      const rowAmu = `<tr style="border-left:3px solid var(--success);background:rgba(0,184,148,.04)">
-        <td>${qBadge} <span class="badge badge-q2" style="margin-left:4px">AMU</span></td>
-        <td>${lotsAmu.length}</td>
-        <td class="amount dafeanne">${fmtA(df.amu)}</td>
-        <td class="amount depot">${fmtA(dp.amu)}</td>
-        <td class="amount total"><strong>${fmtA((df.amu||0)+(dp.amu||0))}</strong></td>
-        <td></td>
-      </tr>`;
-
-      // BIS
+      // BIS de cette saisie
       const bisRows = (bisMap[p.key] || []).map(b => {
-        const color = b.entiteBis === 'INAM' ? 'var(--primary)' : 'var(--success)';
+        const bc = b.entiteBis === 'INAM' ? 'var(--primary)' : 'var(--success)';
         const Tb = b.totaux||{}; const dfb=Tb.dafeanne||{}; const dpb=Tb.depot||{};
-        const entiteField = (b.entiteBis||'').toLowerCase();
-        return `<tr style="background:${color}08;border-left:3px solid ${color}">
+        const bef = (b.entiteBis||'').toLowerCase();
+        const bq = `<span class="badge badge-${b.quinzaine==='Q1'?'q1':'q2'}">${b.quinzaine==='Q1'?'1ère Q.':'2ème Q.'}</span>`;
+        return `<tr style="background:${bc}08;border-left:3px solid ${bc}">
           <td style="padding-left:20px;opacity:.8">↳ ${MOIS_APP[b.month]} ${b.year}</td>
-          <td>${qBadge} <span class="badge" style="background:${color};color:white">${b.entiteBis} BIS</span></td>
+          <td>${bq} <span class="badge" style="background:${bc};color:white">${b.entiteBis} BIS</span></td>
           <td>${(b.lots||[]).length}</td>
-          <td class="amount dafeanne">${fmtA(dfb[entiteField])}</td>
-          <td class="amount depot">${fmtA(dpb[entiteField])}</td>
-          <td class="amount total">${fmtA(Tb.global)}</td>
+          <td class="amount dafeanne">${fmtA(dfb[bef])}</td>
+          <td class="amount depot">${fmtA(dpb[bef])}</td>
+          <td class="amount total">${fmtA((dfb[bef]||0)+(dpb[bef]||0))}</td>
           <td><div style="display:flex;gap:4px">${actionBtns(b.key)}</div></td>
         </tr>`;
       }).join('');
 
-      return rowInam + rowAmu + bisRows;
+      return `<tr style="border-left:3px solid ${color}">
+        <td><strong>${MOIS_APP[p.month]} ${p.year}</strong></td>
+        <td>${qBadge}${eBadge}</td>
+        <td>${(p.lots||[]).length}</td>
+        <td class="amount dafeanne">${fmtA(dfVal)}</td>
+        <td class="amount depot">${fmtA(dpVal)}</td>
+        <td class="amount total"><strong>${fmtA(dfVal+dpVal)}</strong></td>
+        <td><div style="display:flex;gap:4px">${actionBtns(p.key)}</div></td>
+      </tr>${bisRows}`;
     }).join('');
   } catch(e) { console.error(e); toast('Erreur chargement','error'); }
 }
@@ -665,11 +654,18 @@ async function openEditBon(periodKey, lotNum, bonId) {
 // ══════════════════════════════════════════════════════════════
 
 let _lots = [];
-let _bisMode = null; // null | { parentKey, entite, year, month, quinzaine }
+let _bisMode = null;       // null | { parentKey, entite, year, month, quinzaine }
+let _saisieEntite = null;  // 'INAM' | 'AMU' — verrouillée pour toute la saisie
+
+function setSaisieEntite(entite) {
+  _saisieEntite = entite;
+  renderLotsBuilder();
+}
 
 function renderNouvelle() {
   document.getElementById('form-nouvelle').reset();
   _lots = [];
+  _saisieEntite = null;
 
   const banner = document.getElementById('bis-mode-banner');
   if (_bisMode && banner) {
@@ -691,6 +687,7 @@ function renderNouvelle() {
     if (qEl) { qEl.value = _bisMode.quinzaine; qEl.disabled = true; }
     const bisEl = document.getElementById('new-bis-row');
     if (bisEl) bisEl.style.display = 'none';
+    _saisieEntite = _bisMode.entite;
   } else {
     if (banner) banner.innerHTML = '';
     ['new-year','new-month','new-quinzaine'].forEach(id => {
@@ -709,10 +706,11 @@ function openBisSaisie(parentKey, entite, year, month, quinzaine) {
 }
 
 function addLot() {
+  const entite = _saisieEntite;
+  if (!entite) { toast('Choisissez d\'abord l\'entité (INAM ou AMU) avant d\'ajouter un lot.', 'error'); return; }
   const n = _lots.length + 1;
-  const entite = _bisMode ? _bisMode.entite : null;
   _lots.push({ numero: n, entite, bons: [] });
-  if (entite) addBon(n); // premier bon automatique si entité connue
+  addBon(n); // premier bon automatique
   renderLotsBuilder();
   setTimeout(() => {
     const builder = document.getElementById('lots-builder');
@@ -802,29 +800,36 @@ function renderLotsBuilder() {
   const c = document.getElementById('lots-builder');
   let html = '';
 
+  // Sélecteur d'entité global — affiché si entité pas encore choisie
+  if (!_saisieEntite) {
+    html = `<div style="background:var(--card-bg);border:2px dashed var(--border);border-radius:12px;padding:32px;text-align:center">
+      <div style="font-size:36px;margin-bottom:12px">🏷️</div>
+      <p style="font-size:15px;font-weight:600;margin-bottom:20px">Choisissez l'entité de cette saisie :</p>
+      <div style="display:flex;gap:20px;justify-content:center">
+        <button class="btn btn-primary" style="min-width:150px;font-size:16px;padding:14px" onclick="setSaisieEntite('INAM')">🏥 INAM</button>
+        <button class="btn btn-success" style="min-width:150px;font-size:16px;padding:14px" onclick="setSaisieEntite('AMU')">💊 AMU</button>
+      </div>
+    </div>`;
+    c.innerHTML = html;
+    return;
+  }
+
+  // Entité choisie — bandeau de rappel
+  const entiteColor = _saisieEntite === 'INAM' ? 'var(--primary)' : 'var(--success)';
+  html += `<div style="background:${entiteColor}15;border:1px solid ${entiteColor}40;border-radius:8px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:18px">${_saisieEntite==='INAM'?'🏥':'💊'}</span>
+    <strong style="color:${entiteColor}">Saisie ${_saisieEntite} — tous les lots de cette saisie</strong>
+    ${!_lots.length ? `<button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="_saisieEntite=null;renderLotsBuilder()">Changer</button>` : ''}
+  </div>`;
+
   if (!_lots.length) {
     html += `<div style="padding:20px;text-align:center;color:var(--text-muted)">
       <div style="font-size:40px;margin-bottom:8px">📦</div>
-      <p style="margin-bottom:16px">Aucun lot — commencez par en créer un.</p>
+      <p style="margin-bottom:16px">Aucun lot — cliquez sur "Ajouter un lot".</p>
     </div>`;
   } else {
     _lots.forEach(lot => {
-      if (!lot.entite) {
-        html += `
-        <div class="lot-card" style="margin-bottom:14px">
-          <div class="lot-header" style="cursor:default;justify-content:space-between">
-            <h4>${lotHeaderLabel(lot)}</h4>
-            <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer</button>
-          </div>
-          <div class="lot-body open" style="padding:24px;text-align:center">
-            <p style="margin-bottom:14px;color:var(--text-muted);font-size:14px">Choisissez l'entité de ce lot :</p>
-            <div style="display:flex;gap:16px;justify-content:center">
-              <button class="btn btn-primary" style="min-width:130px;font-size:15px" onclick="setLotEntite(${lot.numero},'INAM')">🏥 INAM</button>
-              <button class="btn btn-success" style="min-width:130px;font-size:15px" onclick="setLotEntite(${lot.numero},'AMU')">💊 AMU</button>
-            </div>
-          </div>
-        </div>`;
-      } else {
+      {
         const e = lot.entite;
         const complet = lot.bons.length >= 10;
         html += `
@@ -932,21 +937,25 @@ async function saveNouvelle() {
 
   try {
     if (_bisMode) {
-      // Saisie BIS entité
+      // Saisie BIS — entité connue via _bisMode
       const key = getBisKey(_bisMode.parentKey, _bisMode.entite);
       const existing = await getQuinzaineDocRef(key).get();
       if (existing.exists) { toast(`Une saisie BIS ${_bisMode.entite} existe déjà pour cette quinzaine.`, 'error'); return; }
-      await savePeriod({ year, month, quinzaine, bis: true, entiteBis: _bisMode.entite, parentKey: _bisMode.parentKey, lots: _lots, _key: key });
+      await savePeriod({ year, month, quinzaine, entite: _bisMode.entite, entiteBis: _bisMode.entite, parentKey: _bisMode.parentKey, lots: _lots, _key: key });
       toast(`Saisie BIS ${_bisMode.entite} enregistrée ✓`, 'success');
       logAction(`Saisie BIS ${_bisMode.entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
       _bisMode = null;
     } else {
-      const existing = await getPeriod(year, month, quinzaine, bisCheck);
-      if (existing) { toast(`Cette quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} existe déjà. Supprimez-la d'abord si vous souhaitez la recréer.`, 'error'); return; }
-      await savePeriod({ year, month, quinzaine, bis: bisCheck, lots: _lots });
-      toast(`Quinzaine ${quinzaine}${bisCheck?' BIS':''} ${MOIS_APP[month]} ${year} enregistrée ✓`, 'success');
-      logAction('Nouvelle quinzaine', `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
+      // Saisie normale — entité obligatoire et indépendante
+      const entite = _saisieEntite;
+      if (!entite) { toast('Choisissez l\'entité (INAM ou AMU) avant d\'enregistrer.', 'error'); return; }
+      const existing = await getPeriod(year, month, quinzaine, entite);
+      if (existing) { toast(`La quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} existe déjà.`, 'error'); return; }
+      await savePeriod({ year, month, quinzaine, entite, lots: _lots });
+      toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} enregistrée ✓`, 'success');
+      logAction(`Nouvelle quinzaine ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
     }
+    _saisieEntite = null;
     navigate('quinzaines');
   } catch(e) { toast('Erreur sauvegarde: '+e.message,'error'); }
 }

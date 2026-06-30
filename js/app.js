@@ -148,6 +148,7 @@ function renderSidebar(user) {
 
   const isSuperAdmin = u.role === 'superadmin';
   const isTitulaire  = u.role === 'titulaire';
+  const isAssistant  = u.role === 'assistant';
   const isOperateur  = u.role === 'operateur';
 
   const perms = u.permissions || {};
@@ -172,11 +173,11 @@ function renderSidebar(user) {
   const navUsers = document.getElementById('nav-users');
   if (navUsers) navUsers.style.display = isTitulaire ? 'flex' : 'none';
 
-  // Catalogue fournisseurs + Journal : titulaire et superadmin uniquement
+  // Catalogue fournisseurs + Journal : titulaire, superadmin, et assistant
   const navCatFrs = document.getElementById('nav-catalogue-frs');
-  if (navCatFrs) navCatFrs.style.display = (isTitulaire || isSuperAdmin) ? 'flex' : 'none';
+  if (navCatFrs) navCatFrs.style.display = (isTitulaire || isSuperAdmin || isAssistant) ? 'flex' : 'none';
   const navJournal = document.getElementById('nav-journal');
-  if (navJournal) navJournal.style.display = (isTitulaire || isSuperAdmin) ? 'flex' : 'none';
+  if (navJournal) navJournal.style.display = (isTitulaire || isSuperAdmin || isAssistant) ? 'flex' : 'none';
 
   // Bouton retour admin (si superadmin navigue dans une pharmacie)
   const navBack = document.getElementById('nav-back-admin');

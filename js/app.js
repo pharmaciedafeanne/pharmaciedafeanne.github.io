@@ -306,8 +306,38 @@ async function renderQuinzaines() {
         <p>Importez votre fichier Excel ou créez une nouvelle quinzaine.</p></div></td></tr>`;
       return;
     }
-    tbody.innerHTML = periods.map(p => `
-      <tr>
+    // Séparer quinzaines normales et BIS
+    const normales = periods.filter(p => !p.entiteBis);
+    const bisMap   = {};
+    periods.filter(p => p.entiteBis).forEach(p => {
+      if (!bisMap[p.parentKey]) bisMap[p.parentKey] = [];
+      bisMap[p.parentKey].push(p);
+    });
+
+    tbody.innerHTML = normales.map(p => {
+      const bisRows = (bisMap[p.key] || []).map(b => {
+        const color = b.entiteBis === 'INAM' ? 'var(--primary)' : 'var(--success)';
+        return `<tr style="background:${color}08;border-left:3px solid ${color}">
+          <td style="padding-left:24px;opacity:.8">↳ BIS ${b.entiteBis}</td>
+          <td><span class="badge" style="background:${color};color:white">${b.entiteBis} BIS</span></td>
+          <td>${(b.lots||[]).length}</td>
+          <td class="amount dafeanne">${fmtA(b.totaux&&b.totaux.dafeanne&&b.totaux.dafeanne.inam)}</td>
+          <td class="amount dafeanne">${fmtA(b.totaux&&b.totaux.dafeanne&&b.totaux.dafeanne.amu)}</td>
+          <td class="amount depot">${fmtA(b.totaux&&b.totaux.depot&&b.totaux.depot.inam)}</td>
+          <td class="amount depot">${fmtA(b.totaux&&b.totaux.depot&&b.totaux.depot.amu)}</td>
+          <td class="amount total">${fmtA(b.totaux&&b.totaux.global)}</td>
+          <td>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="navigate('detail',{key:'${b.key}'})">📋</button>
+              <button class="btn btn-outline btn-sm" onclick="doExportPDF('${b.key}')">PDF</button>
+              <button class="btn btn-outline btn-sm" onclick="doExportExcel('${b.key}')">Excel</button>
+              <button class="btn btn-danger btn-sm btn-icon" onclick="doDeletePeriod('${b.key}')">🗑️</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+
+      return `<tr>
         <td><strong>${MOIS_APP[p.month]} ${p.year}</strong></td>
         <td><span class="badge badge-${p.quinzaine==='Q1'?'q1':'q2'}">${p.quinzaine==='Q1'?'1ère Q.':'2ème Q.'}</span>${p.bis?'<span class="badge" style="background:#f39c12;color:white;margin-left:4px">BIS</span>':''}</td>
         <td>${(p.lots||[]).length}</td>
@@ -324,7 +354,8 @@ async function renderQuinzaines() {
             <button class="btn btn-danger btn-sm btn-icon" onclick="doDeletePeriod('${p.key}')">🗑️</button>
           </div>
         </td>
-      </tr>`).join('');
+      </tr>${bisRows}`;
+    }).join('');
   } catch(e) { console.error(e); toast('Erreur chargement','error'); }
 }
 
@@ -357,7 +388,11 @@ async function renderDetail(key) {
     clotureBanner.className = `cloture-banner ${closed ? 'closed' : 'open'}`;
     clotureBanner.innerHTML = closed
       ? `<span>🔒 Quinzaine <strong>clôturée</strong> — saisie verrouillée</span>
-         ${canReopen ? `<button class="btn-rouvrir" onclick="doRouvrirQuinzaine('${key}')">🔓 Rouvrir</button>` : ''}`
+         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+           <button class="btn btn-primary btn-sm" onclick="openBisSaisie('${key}','INAM',${period.year},${period.month},'${period.quinzaine}')">➕ BIS INAM</button>
+           <button class="btn btn-success btn-sm" onclick="openBisSaisie('${key}','AMU',${period.year},${period.month},'${period.quinzaine}')">➕ BIS AMU</button>
+           ${canReopen ? `<button class="btn-rouvrir" onclick="doRouvrirQuinzaine('${key}')">🔓 Rouvrir</button>` : ''}
+         </div>`
       : `<span>🟢 Quinzaine <strong>ouverte</strong></span>
          ${canClose ? `<button class="btn-cloturer" onclick="doCloturerQuinzaine('${key}')">🔒 Clôturer</button>` : ''}`;
     clotureBanner.classList.remove('hidden');
@@ -617,16 +652,54 @@ async function openEditBon(periodKey, lotNum, bonId) {
 // ══════════════════════════════════════════════════════════════
 
 let _lots = [];
+let _bisMode = null; // null | { parentKey, entite, year, month, quinzaine }
 
 function renderNouvelle() {
   document.getElementById('form-nouvelle').reset();
   _lots = [];
+
+  const banner = document.getElementById('bis-mode-banner');
+  if (_bisMode && banner) {
+    const color = _bisMode.entite === 'INAM' ? 'var(--primary)' : 'var(--success)';
+    banner.innerHTML = `<div style="background:${color}15;border:1px solid ${color}40;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:20px">${_bisMode.entite === 'INAM' ? '🏥' : '💊'}</span>
+      <div>
+        <strong style="color:${color}">MODE SAISIE BIS — ${_bisMode.entite}</strong>
+        <div style="font-size:12px;opacity:.8">Complément de la quinzaine ${_bisMode.quinzaine} — lots ${_bisMode.entite} uniquement</div>
+      </div>
+      <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="_bisMode=null;navigate('nouvelle')">✕ Annuler</button>
+    </div>`;
+    // Pré-remplir les champs et les verrouiller
+    const yEl = document.getElementById('new-year');
+    const mEl = document.getElementById('new-month');
+    const qEl = document.getElementById('new-quinzaine');
+    if (yEl) { yEl.value = _bisMode.year; yEl.disabled = true; }
+    if (mEl) { mEl.value = _bisMode.month; mEl.disabled = true; }
+    if (qEl) { qEl.value = _bisMode.quinzaine; qEl.disabled = true; }
+    const bisEl = document.getElementById('new-bis-row');
+    if (bisEl) bisEl.style.display = 'none';
+  } else {
+    if (banner) banner.innerHTML = '';
+    ['new-year','new-month','new-quinzaine'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.disabled = false;
+    });
+    const bisEl = document.getElementById('new-bis-row');
+    if (bisEl) bisEl.style.display = '';
+  }
+
   renderLotsBuilder();
+}
+
+function openBisSaisie(parentKey, entite, year, month, quinzaine) {
+  _bisMode = { parentKey, entite, year, month, quinzaine };
+  navigate('nouvelle');
 }
 
 function addLot() {
   const n = _lots.length + 1;
-  _lots.push({ numero: n, entite: null, bons: [] });
+  const entite = _bisMode ? _bisMode.entite : null;
+  _lots.push({ numero: n, entite, bons: [] });
+  if (entite) addBon(n); // premier bon automatique si entité connue
   renderLotsBuilder();
   setTimeout(() => {
     const builder = document.getElementById('lots-builder');
@@ -831,15 +904,27 @@ async function saveNouvelle() {
   const year      = parseInt(document.getElementById('new-year').value);
   const month     = parseInt(document.getElementById('new-month').value);
   const quinzaine = document.getElementById('new-quinzaine').value;
-  const bis       = document.getElementById('new-bis').checked;
+  const bisCheck  = document.getElementById('new-bis').checked;
   if (!year || !month || !quinzaine) { toast('Remplissez tous les champs','error'); return; }
-
-  const existing = await getPeriod(year, month, quinzaine, bis);
-  if (existing && !confirm(`Cette quinzaine existe déjà. Écraser ?`)) return;
+  if (!_lots.length) { toast('Ajoutez au moins un lot','error'); return; }
 
   try {
-    await savePeriod({ year, month, quinzaine, bis, lots: _lots });
-    toast(`Quinzaine ${quinzaine}${bis?' BIS':''} ${MOIS_APP[month]} ${year} enregistrée ✓`, 'success');
+    if (_bisMode) {
+      // Saisie BIS entité
+      const key = getBisKey(_bisMode.parentKey, _bisMode.entite);
+      const existing = await getQuinzaineDocRef(key).get();
+      if (existing.exists && !confirm(`Une saisie BIS ${_bisMode.entite} existe déjà. Écraser ?`)) return;
+      await savePeriod({ year, month, quinzaine, bis: true, entiteBis: _bisMode.entite, parentKey: _bisMode.parentKey, lots: _lots, _key: key });
+      toast(`Saisie BIS ${_bisMode.entite} enregistrée ✓`, 'success');
+      logAction(`Saisie BIS ${_bisMode.entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
+      _bisMode = null;
+    } else {
+      const existing = await getPeriod(year, month, quinzaine, bisCheck);
+      if (existing && !confirm(`Cette quinzaine existe déjà. Écraser ?`)) return;
+      await savePeriod({ year, month, quinzaine, bis: bisCheck, lots: _lots });
+      toast(`Quinzaine ${quinzaine}${bisCheck?' BIS':''} ${MOIS_APP[month]} ${year} enregistrée ✓`, 'success');
+      logAction('Nouvelle quinzaine', `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
+    }
     navigate('quinzaines');
   } catch(e) { toast('Erreur sauvegarde: '+e.message,'error'); }
 }

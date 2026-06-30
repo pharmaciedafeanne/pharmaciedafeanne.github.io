@@ -50,6 +50,10 @@ function periodKey(year, month, quinzaine, bis) {
   return `${year}-${String(month).padStart(2,'0')}-${quinzaine}${bis ? '-BIS' : ''}`;
 }
 
+function getBisKey(parentKey, entite) {
+  return `${parentKey}-${entite}-BIS`;
+}
+
 // ── Référence sous-collection quinzaines ─────────────────────────────
 
 function quinzainesRef(pharmacieId) {
@@ -124,7 +128,8 @@ async function migrateRootQuinzaines() {
 
 async function savePeriod(period) {
   period = recalcPeriod(period);
-  const key = periodKey(period.year, period.month, period.quinzaine, period.bis);
+  const key = period._key || periodKey(period.year, period.month, period.quinzaine, period.bis);
+  delete period._key;
   period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (!period.createdAt) period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
   await quinzainesRef().doc(key).set(period, { merge: true });

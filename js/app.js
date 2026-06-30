@@ -1065,7 +1065,7 @@ async function saveNouvelle() {
       // Saisie BIS — entité connue via _bisMode
       const key = getBisKey(_bisMode.parentKey, _bisMode.entite);
       const existing = await getQuinzaineDocRef(key).get();
-      if (existing.exists) { toast(`Une saisie BIS ${_bisMode.entite} existe déjà pour cette quinzaine.`, 'error'); return; }
+      if (existing.exists && existing.data().brouillon !== true) { toast(`Une saisie BIS ${_bisMode.entite} existe déjà pour cette quinzaine.`, 'error'); return; }
       await savePeriod({ year, month, quinzaine, entite: _bisMode.entite, entiteBis: _bisMode.entite, parentKey: _bisMode.parentKey, lots: _lots, brouillon: false, _key: key });
       toast(`Saisie BIS ${_bisMode.entite} enregistrée ✓`, 'success');
       logAction(`Saisie BIS ${_bisMode.entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
@@ -1075,7 +1075,7 @@ async function saveNouvelle() {
       const entite = _saisieEntite;
       if (!entite) { toast('Choisissez l\'entité (INAM ou AMU) avant d\'enregistrer.', 'error'); return; }
       const existing = await getPeriod(year, month, quinzaine, entite);
-      if (existing) { toast(`La quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} existe déjà.`, 'error'); return; }
+      if (existing && existing.brouillon !== true) { toast(`La quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} existe déjà.`, 'error'); return; }
       await savePeriod({ year, month, quinzaine, entite, lots: _lots, brouillon: false });
       toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} enregistrée ✓`, 'success');
       logAction(`Nouvelle quinzaine ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');

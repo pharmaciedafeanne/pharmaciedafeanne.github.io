@@ -717,6 +717,14 @@ function setLotEntite(lotNum, entite) {
   addBon(lotNum); // premier bon automatique
 }
 
+function add10Bons(lotNum) {
+  const lot = _lots.find(l => l.numero === lotNum);
+  if (!lot || !lot.entite) return;
+  const places = 10 - lot.bons.length;
+  if (places <= 0) { toast(`⚠️ LOT N°${lot.numero} déjà complet.`, 'info'); return; }
+  for (let i = 0; i < places; i++) addBon(lotNum);
+}
+
 function addBon(lotNum) {
   const lot = _lots.find(l => l.numero === lotNum);
   if (!lot || !lot.entite) return;
@@ -834,7 +842,8 @@ function renderLotsBuilder() {
             <div style="padding:12px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               ${complet
                 ? `<span style="color:var(--danger);font-size:12px;font-weight:600">⚠️ Lot complet (10/10)</span>`
-                : `<button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ Ajouter un bon</button>`
+                : `<button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ 1 bon</button>
+                   <button class="btn btn-outline btn-sm" onclick="add10Bons(${lot.numero})">➕ 10 bons</button>`
               }
               <button class="btn btn-primary btn-sm" onclick="addLot()">➕ Lot suivant →</button>
             </div>

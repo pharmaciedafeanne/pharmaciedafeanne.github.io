@@ -142,7 +142,7 @@ function backToAdmin() {
 function renderSidebar(user) {
   const u = user || currentUser;
   document.getElementById('sb-name').textContent = u.name;
-  const roleLabel = { superadmin: 'Super Admin', titulaire: 'Pharmacien Titulaire', operateur: 'Opérateur' };
+  const roleLabel = { superadmin: 'Super Admin', titulaire: 'Pharmacien Titulaire', assistant: 'Assistant', operateur: 'Opérateur' };
   document.getElementById('sb-role').textContent = roleLabel[u.role] || u.role;
   document.getElementById('sb-avatar').textContent = u.name.charAt(0).toUpperCase();
 
@@ -403,9 +403,9 @@ async function renderDetail(key) {
   const clotureBanner = document.getElementById('cloture-banner');
   if (clotureBanner) {
     const closed = !!period.cloturee;
-    const canReopen = currentUser && (currentUser.role === 'titulaire' || currentUser.role === 'superadmin' ||
+    const canReopen = currentUser && (['titulaire','superadmin','assistant'].includes(currentUser.role) ||
       (currentUser.permissions && currentUser.permissions.rouvrir));
-    const canClose  = currentUser && (currentUser.role !== 'operateur' ||
+    const canClose  = currentUser && (['titulaire','superadmin','assistant'].includes(currentUser.role) ||
       (currentUser.permissions && currentUser.permissions.cloturer));
     clotureBanner.className = `cloture-banner ${closed ? 'closed' : 'open'}`;
     clotureBanner.innerHTML = closed

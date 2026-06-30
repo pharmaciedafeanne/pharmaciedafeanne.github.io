@@ -666,6 +666,8 @@ function renderNouvelle() {
   document.getElementById('form-nouvelle').reset();
   _lots = [];
   _saisieEntite = null;
+  // Proposer la restauration du brouillon (seulement hors mode BIS)
+  if (!_bisMode) { setTimeout(restoreDraft, 100); }
 
   const banner = document.getElementById('bis-mode-banner');
   if (_bisMode && banner) {
@@ -781,6 +783,7 @@ function removeBon(lotNum, bonId) {
     if (header) header.innerHTML = `LOT N°${lot.numero} <span style="font-weight:400;font-size:12px;opacity:.7">(${lot.bons.length} bon${lot.bons.length > 1 ? 's' : ''})</span>`;
   }
   updateLotSubtotal(lotNum);
+  autoSaveDraft();
 }
 
 function lotHeaderLabel(lot) {
@@ -893,6 +896,57 @@ function bonRow(lotNum, bon, entite) {
   </tr>`;
 }
 
+// ── Préenregistrement (auto-save localStorage) ───────────────────────
+let _autoSaveTimer = null;
+function _draftKey() { return `draft_saisie_${_currentPharmacieId||'local'}`; }
+
+function autoSaveDraft() {
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(() => {
+    try {
+      const year      = document.getElementById('new-year')?.value;
+      const month     = document.getElementById('new-month')?.value;
+      const quinzaine = document.getElementById('new-quinzaine')?.value;
+      if (!year || !month || !quinzaine || !_lots.length) return;
+      const draft = { year, month, quinzaine, entite: _saisieEntite, lots: _lots, savedAt: Date.now() };
+      localStorage.setItem(_draftKey(), JSON.stringify(draft));
+      // Indicateur discret
+      const ind = document.getElementById('draft-indicator');
+      if (ind) { ind.textContent = '💾 Préenregistré ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); ind.style.opacity='1'; setTimeout(()=>{ ind.style.opacity='.4'; }, 2000); }
+    } catch(e) {}
+  }, 1500); // délai 1,5s après la dernière frappe
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(_draftKey()); } catch(e) {}
+}
+
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(_draftKey());
+    if (!raw) return false;
+    const draft = JSON.parse(raw);
+    if (!draft.lots || !draft.lots.length) return false;
+    const age = Math.round((Date.now() - draft.savedAt) / 60000);
+    const ageLabel = age < 60 ? `il y a ${age} min` : `il y a ${Math.round(age/60)}h`;
+    const ok = confirm(`Un brouillon de saisie a été trouvé (${draft.entite||''} ${draft.quinzaine||''} — sauvegardé ${ageLabel}).\n\nVoulez-vous le restaurer ?`);
+    if (!ok) { clearDraft(); return false; }
+    // Restaurer les champs
+    const yEl = document.getElementById('new-year');
+    const mEl = document.getElementById('new-month');
+    const qEl = document.getElementById('new-quinzaine');
+    if (yEl) yEl.value = draft.year;
+    if (mEl) mEl.value = draft.month;
+    if (qEl) qEl.value = draft.quinzaine;
+    _saisieEntite = draft.entite || null;
+    _lots = draft.lots || [];
+    renderLotsBuilder();
+    _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
+    toast('Brouillon restauré ✓', 'success');
+    return true;
+  } catch(e) { return false; }
+}
+
 function updateCell(input) {
   const { lot: lotN, bon: bonId, account, field } = input.dataset;
   const lotNum = parseInt(lotN);
@@ -902,6 +956,7 @@ function updateCell(input) {
   if (account === 'remarque') { bon.remarque = input.value; }
   else { bon[account][field] = parseFloat(input.value) || 0; }
   updateLotSubtotal(lotNum);
+  autoSaveDraft();
 }
 
 function updateLotSubtotal(lotNum) {
@@ -925,6 +980,7 @@ function removeLot(num) {
   _lots = _lots.filter(l => l.numero !== num);
   _lots.forEach((l, i) => l.numero = i + 1);
   renderLotsBuilder();
+  autoSaveDraft();
 }
 
 async function saveNouvelle() {
@@ -956,6 +1012,7 @@ async function saveNouvelle() {
       logAction(`Nouvelle quinzaine ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
     }
     _saisieEntite = null;
+    clearDraft();
     navigate('quinzaines');
   } catch(e) { toast('Erreur sauvegarde: '+e.message,'error'); }
 }

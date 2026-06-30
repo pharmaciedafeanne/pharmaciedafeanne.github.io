@@ -132,7 +132,14 @@ async function savePeriod(period) {
   delete period._key;
   period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (!period.createdAt) period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-  await quinzainesRef().doc(key).set(period, { merge: true });
+  // Si brouillon est false, on force la mise à jour pour bien remplacer le flag
+  if (period.brouillon === false) {
+    await quinzainesRef().doc(key).set(period, { merge: true });
+    // Forcer la mise à jour du flag brouillon
+    await quinzainesRef().doc(key).update({ brouillon: false });
+  } else {
+    await quinzainesRef().doc(key).set(period, { merge: true });
+  }
   return { key, ...period };
 }
 

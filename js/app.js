@@ -388,6 +388,8 @@ async function saveDetailEdit(key) {
     _detailEditingKey = null;
     _lots = [];
     _saisieEntite = null;
+    clearTimeout(_autoSaveTimer);
+    clearTimeout(_autoSaveFirestoreTimer);
     navigate('quinzaines');
   } catch(e) { toast('Erreur sauvegarde: '+e.message,'error'); }
 }
@@ -432,6 +434,9 @@ async function renderDetail(key) {
     _detailEditingKey = key;
     _saisieEntite = period.entite || 'INAM';
     _lots = (period.lots || []).map((lot, i) => ({ ...lot, numero: i + 1 }));
+    // Désactiver auto-save brouillon (pas de sauvegarde auto dans la vue detail)
+    clearTimeout(_autoSaveTimer);
+    clearTimeout(_autoSaveFirestoreTimer);
 
     // Afficher lots-builder dans lotsEl avec bouton Enregistrer
     let html = '';

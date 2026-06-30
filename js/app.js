@@ -366,24 +366,30 @@ async function renderQuinzaines() {
 //  DÉTAIL QUINZAINE
 // ══════════════════════════════════════════════════════════════
 
-async function openEditPeriod(key) {
-  if (!key) return;
+let _detailEditingKey = null; // clé de la quinzaine en édition depuis la vue detail
+
+async function saveDetailEdit(key) {
+  if (!_lots.length) { toast('Ajoutez au moins un lot','error'); return; }
   try {
     const snap = await getQuinzaineDocRef(key).get();
     if (!snap.exists) { toast('Quinzaine introuvable','error'); return; }
     const period = snap.data();
-    // Charger en mode édition
-    _saisieEntite = period.entite || 'INAM';
-    _lots = period.lots || [];
-    document.getElementById('new-year').value = period.year || '';
-    document.getElementById('new-month').value = period.month || '';
-    document.getElementById('new-quinzaine').value = period.quinzaine || '';
-    document.getElementById('form-nouvelle').reset();
-    navigate('nouvelle');
-    renderLotsBuilder();
-    _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
-    toast('Quinzaine chargée pour modification ✓', 'info');
-  } catch(e) { toast('Erreur chargement: '+e.message,'error'); }
+    await savePeriod({
+      year: period.year,
+      month: period.month,
+      quinzaine: period.quinzaine,
+      entite: period.entite,
+      lots: _lots,
+      brouillon: false,
+      _key: key
+    });
+    toast(`Quinzaine enregistrée ✓`, 'success');
+    logAction(`Modification quinzaine`, `${period.quinzaine} ${MOIS_APP[period.month]} ${period.year}`, currentUser?.name||'');
+    _detailEditingKey = null;
+    _lots = [];
+    _saisieEntite = null;
+    navigate('quinzaines');
+  } catch(e) { toast('Erreur sauvegarde: '+e.message,'error'); }
 }
 
 async function renderDetail(key) {
@@ -402,8 +408,8 @@ async function renderDetail(key) {
 
   // Bannière clôture
   const clotureBanner = document.getElementById('cloture-banner');
+  const closed = !!period.cloturee;
   if (clotureBanner) {
-    const closed = !!period.cloturee;
     const canReopen = currentUser && (['titulaire','superadmin','assistant'].includes(currentUser.role) ||
       (currentUser.permissions && currentUser.permissions.rouvrir));
     const canClose  = currentUser && (['titulaire','superadmin','assistant'].includes(currentUser.role) ||
@@ -416,12 +422,88 @@ async function renderDetail(key) {
            <button class="btn btn-success btn-sm" onclick="openBisSaisie('${key}','AMU',${period.year},${period.month},'${period.quinzaine}')">➕ BIS AMU</button>
            ${canReopen ? `<button class="btn-rouvrir" onclick="doRouvrirQuinzaine('${key}')">🔓 Rouvrir</button>` : ''}
          </div>`
-      : `<span>🟢 Quinzaine <strong>ouverte</strong></span>
-         <div style="display:flex;gap:8px;align-items:center">
-           <button class="btn btn-primary btn-sm" onclick="openEditPeriod('${key}')">✏️ Modifier</button>
-           ${canClose ? `<button class="btn-cloturer" onclick="doCloturerQuinzaine('${key}')">🔒 Clôturer</button>` : ''}
-         </div>`;
+      : `<span>🟢 Quinzaine <strong>ouverte</strong> — cliquez sur les lots pour modifier</span>
+         ${canClose ? `<button class="btn-cloturer" onclick="doCloturerQuinzaine('${key}')">🔒 Clôturer</button>` : ''}`;
     clotureBanner.classList.remove('hidden');
+  }
+
+  // Si ouverte : afficher en mode éditable
+  if (!closed) {
+    _detailEditingKey = key;
+    _saisieEntite = period.entite || 'INAM';
+    _lots = (period.lots || []).map((lot, i) => ({ ...lot, numero: i + 1 }));
+
+    // Afficher lots-builder dans lotsEl avec bouton Enregistrer
+    let html = '';
+
+    // Rappel entité
+    const entiteColor = _saisieEntite === 'INAM' ? 'var(--primary)' : 'var(--success)';
+    html += `<div style="background:${entiteColor}15;border:1px solid ${entiteColor}40;border-radius:8px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:18px">${_saisieEntite==='INAM'?'🏥':'💊'}</span>
+      <strong style="color:${entiteColor}">Modification — Saisie ${_saisieEntite}</strong>
+    </div>`;
+
+    if (!_lots.length) {
+      html += `<div style="padding:20px;text-align:center;color:var(--text-muted)">
+        <div style="font-size:40px;margin-bottom:8px">📦</div>
+        <p style="margin-bottom:16px">Aucun lot.</p>
+      </div>`;
+    } else {
+      _lots.forEach(lot => {
+        const e = lot.entite;
+        const complet = lot.bons.length >= 10;
+        html += `
+        <div class="lot-card" style="margin-bottom:14px">
+          <div class="lot-header" style="cursor:default;justify-content:space-between">
+            <h4>${lotHeaderLabel(lot)}</h4>
+            <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer le lot</button>
+          </div>
+          <div class="lot-body open">
+            <table class="bons-table">
+              <thead><tr>
+                <th style="width:110px">BON</th>
+                <th class="th-dafeanne">💊 DAFEANNE ${e} (F)</th>
+                <th class="th-depot">🏪 DÉPÔT ${e} (F)</th>
+                <th>OBSERVATION</th>
+                <th style="width:36px"></th>
+              </tr></thead>
+              <tbody id="bon-rows-${lot.numero}">
+                ${lot.bons.map(bon => bonRow(lot.numero, bon, e)).join('')}
+              </tbody>
+              <tfoot><tr class="lot-total-row">
+                <td><strong>SOUS-TOTAL LOT ${lot.numero} — ${e}</strong></td>
+                <td class="amount th-dafeanne" id="st-${lot.numero}-df">0</td>
+                <td class="amount th-depot"    id="st-${lot.numero}-dp">0</td>
+                <td class="amount" colspan="2">Total : <strong id="st-${lot.numero}-total" style="color:var(--primary)">0</strong> F</td>
+              </tr></tfoot>
+            </table>
+            <div style="padding:12px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              ${complet
+                ? `<span style="color:var(--danger);font-size:12px;font-weight:600">⚠️ Lot complet (10/10)</span>`
+                : `<button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ 1 bon</button>
+                   <button class="btn btn-outline btn-sm" onclick="add10Bons(${lot.numero})">➕ 10 bons</button>`
+              }
+              <button class="btn btn-primary btn-sm" onclick="addLot()">➕ Lot suivant →</button>
+            </div>
+          </div>
+        </div>`;
+      });
+    }
+
+    // Bouton ajouter un lot
+    html += `<div style="padding:12px;margin-top:4px">
+      <button class="btn btn-primary" style="width:100%;padding:12px;font-size:15px" onclick="addLot()">➕ Ajouter un lot</button>
+    </div>`;
+
+    // Boutons d'action en bas
+    html += `<div style="padding:20px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border);margin-top:20px">
+      <button class="btn btn-outline" onclick="navigate('quinzaines')">Annuler</button>
+      <button class="btn btn-success" onclick="saveDetailEdit('${key}')">💾 Enregistrer</button>
+    </div>`;
+
+    lotsEl.innerHTML = html;
+    _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
+    return;
   }
 
   const T = period.totaux || {};

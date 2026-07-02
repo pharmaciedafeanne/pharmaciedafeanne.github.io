@@ -510,13 +510,14 @@
               </select>
               <button class="btn btn-outline btn-sm" onclick="exportFrsExcel()">📊 Excel</button>
               <button class="btn btn-outline btn-sm" onclick="exportFrsPDF()">📄 PDF</button>
+              <button class="btn btn-danger btn-sm" onclick="exportFrsUrgent()">⚠️ Urgentes</button>
               <button class="btn btn-primary" onclick="openNewFacture()">➕ Nouvelle facture</button>
             </div>
           </div>
           <div id="frs-notif-bar" class="hidden frs-notif-bar"></div>
           <div class="table-wrapper">
             <table>
-              <thead><tr><th>Date</th><th>Fournisseur</th><th>Désignation</th><th>Montant</th><th>Échéance</th><th>Paiement</th><th>Statut</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Date</th><th>Fournisseur</th><th>Désignation</th><th>Montant</th><th>Échéance</th><th>Jours</th><th>Paiement</th><th>Statut</th><th>Actions</th></tr></thead>
               <tbody id="frs-tbody"></tbody>
             </table>
           </div>

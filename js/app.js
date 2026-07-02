@@ -2471,12 +2471,26 @@ async function renderFournisseurs() {
       const isAlerte = alerts.some(a => a.id === f.id);
       const badgeClass = f.statut === 'payé' ? 'badge-frs-paye' : isAlerte ? 'badge-frs-alerte' : f.statut === 'en cours' ? 'badge-frs-encours' : 'badge-frs-nonpaye';
       const statutLbl  = f.statut === 'payé' ? 'Payé' : isAlerte ? '⚠️ Urgent' : f.statut === 'en cours' ? 'En cours' : 'Non payé';
+
+      // Calcul jours restants
+      let joursTexte = '—';
+      if (f.echeance && f.statut !== 'payé') {
+        const ts = new Date(f.echeance).getTime();
+        const jours = Math.ceil((ts - now) / 86400000);
+        if (jours < 0) joursTexte = `<span style="color:var(--danger);font-weight:600">Expiré</span>`;
+        else if (jours === 0) joursTexte = `<span style="color:var(--danger);font-weight:600">Aujourd'hui</span>`;
+        else if (jours <= 3) joursTexte = `<span style="color:var(--danger);font-weight:600">${jours}j</span>`;
+        else if (jours <= 7) joursTexte = `<span style="color:var(--warning);font-weight:600">${jours}j</span>`;
+        else joursTexte = `${jours}j`;
+      }
+
       return `<tr>
         <td>${esc(f.dateFacture||'—')}</td>
         <td><strong>${esc(f.fournisseur||'—')}</strong></td>
         <td>${esc(f.designation||'—')}</td>
         <td class="amount">${fmtA(f.montant)}</td>
         <td>${esc(f.echeance||'—')}</td>
+        <td>${joursTexte}</td>
         <td class="amount" style="color:var(--success)">${fmtA(f.montantPaye||0)}</td>
         <td>
           <select class="filter-select" style="padding:3px 6px;font-size:12px" onchange="quickChangeStatutFacture('${f.id}', this.value)">
@@ -2544,6 +2558,53 @@ async function exportFrsPDF() {
     doc.save(`FOURNISSEURS_${label}.pdf`);
     toast('Export PDF OK ✓','success');
   } catch(e) { toast('Erreur PDF: '+e.message,'error'); }
+}
+
+async function exportFrsUrgent() {
+  try {
+    const list = await getAllFactures();
+    const now = Date.now();
+    const filtreMois = (document.getElementById('frs-filter-month')||{}).value||'';
+
+    // Factures urgentes : échéance < 72h et non payées
+    let filtered = list.filter(f => {
+      if (f.statut === 'payé') return false;
+      if (!f.echeance) return false;
+      const ts = new Date(f.echeance).getTime();
+      const jours = f.alerteJours ? f.alerteJours * 86400000 : 72 * 3600 * 1000;
+      return ts >= now && ts <= now + jours;
+    });
+
+    // Ajouter filtre mois
+    if (filtreMois) {
+      filtered = filtered.filter(f => (f.dateFacture||'').startsWith(filtreMois));
+    }
+
+    if (!filtered.length) { toast('Aucune facture urgente à exporter','info'); return; }
+
+    const wb = XLSX.utils.book_new();
+    const rows = [['Date','Fournisseur','Désignation','Montant','Échéance','Jours restants','Montant payé','Statut','Observations']];
+    filtered.forEach(f => {
+      const ts = new Date(f.echeance).getTime();
+      const jours = Math.ceil((ts - now) / 86400000);
+      rows.push([
+        f.dateFacture||'',
+        f.fournisseur||'',
+        f.designation||'',
+        f.montant||0,
+        f.echeance||'',
+        jours,
+        f.montantPaye||0,
+        f.statut||'',
+        f.note||''
+      ]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Factures urgentes');
+    const label = filtreMois || 'TOUTES';
+    XLSX.writeFile(wb, `FACTURES_URGENTES_${label}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast(`Export ${filtered.length} facture(s) urgente(s) ✓`,'success');
+  } catch(e) { toast('Erreur export: '+e.message,'error'); }
 }
 
 function onProspectiveChange() {

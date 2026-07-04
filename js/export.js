@@ -29,10 +29,17 @@ function t(p, path) {
 // ══════════════════════════════════════════════════════════════
 
 async function exportPDF(periods, filename, reportTitle) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  // A4 landscape : 297 × 210 mm
-  const W = 297, H = 210, ML = 10, MR = 10, MT = 38;
+  try {
+    Logger.info('Export PDF démarré', { nbPeriods: periods?.length || 0, filename, title: reportTitle });
+
+    if (!periods || !periods.length) {
+      throw new Error('Aucune période à exporter');
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    // A4 landscape : 297 × 210 mm
+    const W = 297, H = 210, ML = 10, MR = 10, MT = 38;
 
   function pageHeader() {
     doc.setFillColor(...C_PRIMARY);
@@ -228,7 +235,14 @@ async function exportPDF(periods, filename, reportTitle) {
     pageFooter(i, totalPages);
   }
 
-  doc.save(filename);
+    doc.save(filename);
+
+    Logger.info('Export PDF complété', { filename, nbPages: totalPages });
+
+  } catch (e) {
+    Logger.error('Erreur export PDF', { filename, error: e.message, stack: e.stack });
+    toast('Erreur export PDF: ' + e.message, 'error');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -236,18 +250,25 @@ async function exportPDF(periods, filename, reportTitle) {
 // ══════════════════════════════════════════════════════════════
 
 function exportExcel(periods, filename) {
-  const wb = XLSX.utils.book_new();
+  try {
+    Logger.info('Export Excel démarré', { nbPeriods: periods?.length || 0, filename });
 
-  // ── Feuille récapitulative ──
-  const recap = [
-    ['PHARMACIE DAFEANNE — RÉCAPITULATIF GÉNÉRAL'],
-    [`Généré le ${new Date().toLocaleDateString('fr-FR')}`],
-    [],
-    ['PÉRIODE','QUINT.','DAFEANNE INAM','DAFEANNE AMU','TOTAL DAFEANNE',
-     'DÉPÔT INAM','DÉPÔT AMU','TOTAL DÉPÔT','TOTAL INAM','TOTAL AMU','FACTURE FINALE']
-  ];
-  periods.forEach(p => {
-    recap.push([
+    if (!periods || !periods.length) {
+      throw new Error('Aucune période à exporter');
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // ── Feuille récapitulative ──
+    const recap = [
+      ['PHARMACIE DAFEANNE — RÉCAPITULATIF GÉNÉRAL'],
+      [`Généré le ${new Date().toLocaleDateString('fr-FR')}`],
+      [],
+      ['PÉRIODE','QUINT.','DAFEANNE INAM','DAFEANNE AMU','TOTAL DAFEANNE',
+       'DÉPÔT INAM','DÉPÔT AMU','TOTAL DÉPÔT','TOTAL INAM','TOTAL AMU','FACTURE FINALE']
+    ];
+    periods.forEach(p => {
+      recap.push([
       `${MOIS_NOMS[p.month]} ${p.year}`, p.quinzaine,
       t(p,'dafeanne.inam'), t(p,'dafeanne.amu'), t(p,'dafeanne.total'),
       t(p,'depot.inam'),    t(p,'depot.amu'),    t(p,'depot.total'),
@@ -348,7 +369,14 @@ function exportExcel(periods, filename) {
     const ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!cols'] = [18,14,15,15,15,15,15,15,15,35].map(w=>({wch:w}));
     XLSX.utils.book_append_sheet(wb, ws, title.substring(0,31));
-  });
+    });
 
-  XLSX.writeFile(wb, filename);
+    XLSX.writeFile(wb, filename);
+
+    Logger.info('Export Excel complété', { filename, nbSheets: wb.SheetNames.length });
+
+  } catch (e) {
+    Logger.error('Erreur export Excel', { filename, error: e.message, stack: e.stack });
+    toast('Erreur export Excel: ' + e.message, 'error');
+  }
 }

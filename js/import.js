@@ -101,39 +101,58 @@ function parseSheet(ws) {
 
 async function importExcelFile(file) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-        const results = [];
+    try {
+      Logger.info('Import Excel démarré', { filename: file.name, size: file.size });
 
-        wb.SheetNames.forEach(name => {
-          if (/^feuil/i.test(name.trim()) || !name.trim()) return;
-          const meta = parseSheetName(name);
-          if (!meta) return;
-          const lots = parseSheet(wb.Sheets[name]);
-          if (lots.length > 0) {
-            const period = recalcPeriod({
-              ...meta,
-              lots,
-              sheetName: name,
-              importedAt: new Date().toISOString()
-            });
-            results.push(period);
-          }
-        });
+      const reader = new FileReader();
 
-        // Tri chronologique
-        results.sort((a, b) =>
-          a.year !== b.year ? a.year - b.year :
-          a.month !== b.month ? a.month - b.month :
-          a.quinzaine === 'Q1' ? -1 : 1
-        );
+      reader.onload = (e) => {
+        try {
+          const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+          const results = [];
 
-        resolve(results);
-      } catch (err) { reject(err); }
-    };
-    reader.onerror = reject;
-    reader.readAsArrayBuffer(file);
+          wb.SheetNames.forEach(name => {
+            if (/^feuil/i.test(name.trim()) || !name.trim()) return;
+            const meta = parseSheetName(name);
+            if (!meta) return;
+            const lots = parseSheet(wb.Sheets[name]);
+            if (lots.length > 0) {
+              const period = recalcPeriod({
+                ...meta,
+                lots,
+                sheetName: name,
+                importedAt: new Date().toISOString()
+              });
+              results.push(period);
+            }
+          });
+
+          // Tri chronologique
+          results.sort((a, b) =>
+            a.year !== b.year ? a.year - b.year :
+            a.month !== b.month ? a.month - b.month :
+            a.quinzaine === 'Q1' ? -1 : 1
+          );
+
+          Logger.info('Import Excel complété', { filename: file.name, nbPeriods: results.length });
+          resolve(results);
+
+        } catch (err) {
+          Logger.error('Erreur traitement Excel', { filename: file.name, error: err.message });
+          reject(err);
+        }
+      };
+
+      reader.onerror = (err) => {
+        Logger.error('Erreur lecture fichier', { filename: file.name, error: err });
+        reject(new Error('Erreur lecture fichier: ' + file.name));
+      };
+
+      reader.readAsArrayBuffer(file);
+
+    } catch (err) {
+      Logger.error('Erreur import Excel', { filename: file?.name, error: err.message });
+      reject(err);
+    }
   });
 }

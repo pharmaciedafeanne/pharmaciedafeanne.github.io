@@ -1,0 +1,127 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ── FONCTIONS HELPERS ────────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function getUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isAuth() && getUser().role == 'superadmin';
+    }
+
+    function isTitulaire() {
+      return isAuth() && getUser().role == 'titulaire';
+    }
+
+    function isAssistant() {
+      return isAuth() && getUser().role == 'assistant';
+    }
+
+    function isOperateur() {
+      return isAuth() && getUser().role == 'operateur';
+    }
+
+    function hasPermission(perm) {
+      return isAuth() && (getUser().permissions[perm] == true || isSuperAdmin());
+    }
+
+    function belongsToPharmacy(pharmacieId) {
+      return isAuth() && getUser().pharmacieId == pharmacieId;
+    }
+
+    function isOwnerPharmacy(pharmacieId) {
+      return isAuth() && (getUser().pharmacieId == pharmacieId || isSuperAdmin());
+    }
+
+    // ── QUINZAINES (quinzaines/{pharmacieId}/quinzaines/{key}) ───────────
+    match /pharmacies/{pharmacieId}/quinzaines/{doc} {
+      // Lecture : authentifiés + appartiennent à la pharmacie
+      allow read: if belongsToPharmacy(pharmacieId);
+
+      // Création : titulaire, assistant, operateur + appartiennent à pharmacie
+      allow create: if belongsToPharmacy(pharmacieId) &&
+                      (isTitulaire() || isAssistant() || isOperateur());
+
+      // Modification : titulaire, assistant, operateur + appartiennent à pharmacie
+      allow update: if belongsToPharmacy(pharmacieId) &&
+                       (isTitulaire() || isAssistant() || isOperateur()) &&
+                       // Empêcher modification de pharmacieId
+                       !request.resource.data.diff(resource.data).affectedKeys()
+                         .hasAny(['pharmacieId']);
+
+      // Suppression : titulaire seulement
+      allow delete: if belongsToPharmacy(pharmacieId) && isTitulaire();
+    }
+
+    // ── FACTURES (pharmacies/{pharmacieId}/factures/{id}) ───────────────
+    match /pharmacies/{pharmacieId}/factures/{id} {
+      allow read: if belongsToPharmacy(pharmacieId);
+      allow create: if belongsToPharmacy(pharmacieId) &&
+                       (isTitulaire() || isAssistant());
+      allow update: if belongsToPharmacy(pharmacieId) &&
+                       (isTitulaire() || isAssistant());
+      allow delete: if belongsToPharmacy(pharmacieId) &&
+                       (isTitulaire() || isSuperAdmin());
+    }
+
+    // ── JOURNAL (pharmacies/{pharmacieId}/journal/{id}) ──────────────────
+    match /pharmacies/{pharmacieId}/journal/{id} {
+      allow read: if belongsToPharmacy(pharmacieId) &&
+                      (isTitulaire() || isAssistant());
+      allow write: if belongsToPharmacy(pharmacieId);
+    }
+
+    // ── CATALOGUE FOURNISSEURS (pharmacies/{pharmacieId}/catalogue_frs/{id}) ──
+    match /pharmacies/{pharmacieId}/catalogue_frs/{id} {
+      allow read: if belongsToPharmacy(pharmacieId);
+      allow write: if belongsToPharmacy(pharmacieId) &&
+                       (isTitulaire() || isAssistant());
+    }
+
+    // ── CAISSE (pharmacies/{pharmacieId}/caisse/{id}) ──────────────────
+    match /pharmacies/{pharmacieId}/caisse/{id} {
+      allow read: if belongsToPharmacy(pharmacieId);
+      allow write: if belongsToPharmacy(pharmacieId) &&
+                       (isTitulaire() || isAssistant());
+    }
+
+    // ── INAM/AMU (pharmacies/{pharmacieId}/inam_amu/{id}) ──────────────
+    match /pharmacies/{pharmacieId}/inam_amu/{id} {
+      allow read: if belongsToPharmacy(pharmacieId);
+      allow write: if belongsToPharmacy(pharmacieId) &&
+                       (isTitulaire() || isOperateur() || isAssistant());
+    }
+
+    // ── UTILISATEURS (users/{uid}) ───────────────────────────────────────
+    match /users/{uid} {
+      // Chaque user peut lire son propre profil
+      allow read: if isAuth() && request.auth.uid == uid;
+      // Les users ne peuvent pas modifier leur propre profil
+      allow update: if false;
+      // Les superadmins peuvent gérer les users
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+
+    // ── PHARMACIES (pharmacies/{id}) ────────────────────────────────────
+    match /pharmacies/{id} {
+      allow read: if isAuth();
+      allow write: if isSuperAdmin();
+    }
+
+    // ── LOGIN CODES (public, lecture seule) ────────────────────────────
+    match /loginCodes/{pharmacieId} {
+      allow read: if true; // Public pour login
+      allow write: if isSuperAdmin();
+    }
+
+    // ── DENY ALL PAR DÉFAUT ──────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

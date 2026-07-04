@@ -1605,17 +1605,6 @@ function formatDraftLabel(draft) {
   const MOIS = ['', 'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
   return `${draft.entite || ''} — ${draft.quinzaine || ''} ${MOIS[draft.month] || ''} ${draft.year || ''}`;
 }
-    _saisieEntite = draft.entite || null;
-    _lots = draft.lots || [];
-    document.getElementById('new-year').value  = draft.year  || '';
-    document.getElementById('new-month').value = draft.month || '';
-    document.getElementById('new-quinzaine').value = draft.quinzaine || '';
-    renderLotsBuilder();
-    _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
-    toast('Brouillon local restauré ✓', 'success');
-    return true;
-  } catch(e) { return false; }
-}
 
 function updateCell(input) {
   try {

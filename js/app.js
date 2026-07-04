@@ -2643,6 +2643,8 @@ async function openEditFacture(id) {
   document.getElementById('facture-designation').value = f.designation || '';
   document.getElementById('facture-statut').value      = f.statut      || 'non payé';
   document.getElementById('facture-obs').value         = f.note        || '';
+  document.getElementById('facture-mode').value        = f.mode        || '';
+  document.getElementById('facture-ref').value         = f.ref         || '';
   const prospEl = document.getElementById('facture-prospective');
   if (prospEl) prospEl.checked = !!(f.prospective);
   const alerteRow = document.getElementById('facture-alerte-row');

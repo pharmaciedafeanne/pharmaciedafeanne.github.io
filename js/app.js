@@ -2829,10 +2829,10 @@ async function renderCaisse() {
       const isRecharge = op.type === 'recharge';
       const rowClass   = isRecharge ? 'caisse-recharge' : 'caisse-depense';
       const ref        = isRecharge && op.typeRecharge === 'mobilemoney' ? esc(op.refTransaction||'—') : (isRecharge ? 'Espèce' : '—');
-      const actions    = isRecharge && canEdit
-        ? `<button class="btn btn-outline btn-sm" onclick="openEditRecharge('${op.id}')">✏️</button>
+      const actions    = canEdit
+        ? `<button class="btn btn-outline btn-sm" onclick="openEdit${isRecharge?'Recharge':'Depense'}('${op.id}')">✏️</button>
            <button class="btn btn-danger btn-sm" onclick="doDeleteCaisseOp('${op.id}')">🗑️</button>`
-        : (!isRecharge ? `<button class="btn btn-danger btn-sm" onclick="doDeleteCaisseOp('${op.id}')">🗑️</button>` : '');
+        : '';
       return `<tr class="${rowClass}">
         <td>${esc(op.date||'—')}</td>
         <td><span class="badge" style="background:${isRecharge?'rgba(39,174,96,.15)':'rgba(231,76,60,.1)'};color:${isRecharge?'var(--success)':'var(--danger)'}">${isRecharge?'Recharge':'Dépense'}</span></td>
@@ -2909,6 +2909,19 @@ function openDepense() {
   openModal('modal-depense');
 }
 
+async function openEditDepense(id) {
+  const ops = await getAllCaisseOps();
+  const op = ops.find(x => x.id === id);
+  if (!op) return toast('Opération introuvable','error');
+  document.getElementById('depense-id').value          = id;
+  document.getElementById('depense-date').value        = op.date || '';
+  document.getElementById('depense-montant').value     = op.montant || 0;
+  document.getElementById('depense-fournisseur').value = op.fournisseur || '';
+  document.getElementById('depense-designation').value = op.libelle || '';
+  document.getElementById('depense-obs').value         = op.note || '';
+  openModal('modal-depense');
+}
+
 async function saveDepense() {
   const id          = document.getElementById('depense-id').value;
   const date        = document.getElementById('depense-date').value;
@@ -2918,10 +2931,12 @@ async function saveDepense() {
   const note        = document.getElementById('depense-obs').value.trim();
   if (!date || !montant || !libelle) return toast('Date, montant et désignation obligatoires','error');
   try {
-    await saveCaisseOp({ type: 'depense', date, montant, fournisseur, libelle, note });
+    const data = { type: 'depense', date, montant, fournisseur, libelle, note };
+    if (id) { await saveCaisseOp({ ...data, id }); }
+    else    { await saveCaisseOp(data); }
     closeModal();
-    toast('Dépense enregistrée ✓','success');
-    logAction('Dépense caisse', `${libelle} — ${montant} F`, currentUser?.name||'');
+    toast(id ? 'Dépense modifiée ✓' : 'Dépense enregistrée ✓','success');
+    logAction(id ? 'Modif dépense' : 'Ajout dépense', `${libelle} — ${montant} F`, currentUser?.name||'');
     renderCaisse();
   } catch(e) { toast('Erreur: '+e.message,'error'); }
 }

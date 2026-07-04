@@ -1,7 +1,5 @@
 // ===== EXPORT PDF & EXCEL =====
-
-const MOIS_NOMS = ['','Janvier','Février','Mars','Avril','Mai','Juin',
-  'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+// MOIS_NOMS est défini dans constants.js
 
 const C_PRIMARY  = [26,  58, 107];
 const C_ACCENT   = [0,  180, 216];

@@ -774,56 +774,142 @@ function setSaisieEntite(entite) {
 }
 
 function renderNouvelle() {
-  document.getElementById('form-nouvelle').reset();
-  _lots = [];
-  _saisieEntite = null;
-  // Proposer la restauration du brouillon (seulement hors mode BIS)
-  if (!_bisMode) { setTimeout(restoreDraft, 100); }
+  try {
+    // Réinitialiser le formulaire
+    document.getElementById('form-nouvelle').reset();
+    AppState.set('saisie.lots', []);
+    AppState.set('saisie.entite', null);
 
-  const banner = document.getElementById('bis-mode-banner');
-  if (_bisMode && banner) {
-    const color = _bisMode.entite === 'INAM' ? 'var(--primary)' : 'var(--success)';
-    banner.innerHTML = `<div style="background:${color}15;border:1px solid ${color}40;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
-      <span style="font-size:20px">${_bisMode.entite === 'INAM' ? '🏥' : '💊'}</span>
-      <div>
-        <strong style="color:${color}">MODE SAISIE BIS — ${_bisMode.entite}</strong>
-        <div style="font-size:12px;opacity:.8">Complément de la quinzaine ${_bisMode.quinzaine} — lots ${_bisMode.entite} uniquement</div>
-      </div>
-      <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="_bisMode=null;navigate('nouvelle')">✕ Annuler</button>
-    </div>`;
-    // Pré-remplir les champs et les verrouiller
-    const yEl = document.getElementById('new-year');
-    const mEl = document.getElementById('new-month');
-    const qEl = document.getElementById('new-quinzaine');
-    if (yEl) { yEl.value = _bisMode.year; yEl.disabled = true; }
-    if (mEl) { mEl.value = _bisMode.month; mEl.disabled = true; }
-    if (qEl) { qEl.value = _bisMode.quinzaine; qEl.disabled = true; }
-    const bisEl = document.getElementById('new-bis-row');
-    if (bisEl) bisEl.style.display = 'none';
-    _saisieEntite = _bisMode.entite;
-  } else {
-    if (banner) banner.innerHTML = '';
-    ['new-year','new-month','new-quinzaine'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.disabled = false;
-    });
-    const bisEl = document.getElementById('new-bis-row');
-    if (bisEl) bisEl.style.display = '';
+    // Récupérer l'état BIS
+    const bisMode = AppState.get('bisMode');
+
+    // Proposer restauration brouillon (hors mode BIS)
+    if (!bisMode) {
+      setTimeout(restoreDraft, 100);
+    }
+
+    // Rendu du bandeau BIS
+    const banner = document.getElementById('bis-mode-banner');
+    if (!banner) return;
+
+    if (bisMode) {
+      renderBisModeGallery(bisMode);
+      lockFormFields(bisMode);
+      AppState.set('saisie.entite', bisMode.entite);
+    } else {
+      banner.innerHTML = '';
+      unlockFormFields();
+    }
+
+    renderLotsBuilder();
+
+  } catch (e) {
+    Logger.error('Erreur rendu page nouvelle', { error: e.message, stack: e.stack });
+    toast('Erreur initialisation: ' + e.message, 'error');
   }
+}
 
-  renderLotsBuilder();
+// Helper: Afficher le bandeau BIS
+function renderBisModeGallery(bisMode) {
+  const banner = document.getElementById('bis-mode-banner');
+  if (!banner) return;
+
+  const color = bisMode.entite === ENTITY.INAM ? 'var(--primary)' : 'var(--success)';
+  const icon = bisMode.entite === ENTITY.INAM ? '🏥' : '💊';
+
+  banner.innerHTML = `<div style="background:${color}15;border:1px solid ${color}40;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:20px">${icon}</span>
+    <div>
+      <strong style="color:${color}">MODE SAISIE BIS — ${bisMode.entite}</strong>
+      <div style="font-size:12px;opacity:.8">Complément de la quinzaine ${bisMode.quinzaine} — lots ${bisMode.entite} uniquement</div>
+    </div>
+    <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="AppState.endBisMode();navigate('nouvelle')">✕ Annuler</button>
+  </div>`;
+
+  Logger.debug('Bandeau BIS rendu', { entite: bisMode.entite, quinzaine: bisMode.quinzaine });
+}
+
+// Helper: Verrouiller les champs période en mode BIS
+function lockFormFields(bisMode) {
+  const fields = ['new-year', 'new-month', 'new-quinzaine'];
+  const values = [bisMode.year, bisMode.month, bisMode.quinzaine];
+
+  fields.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = values[i];
+      el.disabled = true;
+    }
+  });
+
+  const bisRow = document.getElementById('new-bis-row');
+  if (bisRow) bisRow.style.display = 'none';
+
+  Logger.debug('Champs formulaire verrouillés pour mode BIS');
+}
+
+// Helper: Déverrouiller les champs période (mode normal)
+function unlockFormFields() {
+  const fields = ['new-year', 'new-month', 'new-quinzaine'];
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+
+  const bisRow = document.getElementById('new-bis-row');
+  if (bisRow) bisRow.style.display = '';
+
+  Logger.debug('Champs formulaire déverrouillés');
 }
 
 function openBisSaisie(parentKey, entite, year, month, quinzaine) {
-  _bisMode = { parentKey, entite, year, month, quinzaine };
-  navigate('nouvelle');
+  try {
+    // Valider paramètres requis
+    if (!parentKey || !entite || !year || !month || !quinzaine) {
+      Logger.error('Paramètres BIS manquants', { parentKey, entite, year, month, quinzaine });
+      toast('Erreur: paramètres invalides', 'error');
+      return;
+    }
+
+    // Valider entité
+    const validEntities = [ENTITY.INAM, ENTITY.AMU];
+    if (!validEntities.includes(entite)) {
+      Logger.error('Entité BIS invalide', { entite, validEntities });
+      toast('Entité invalide: ' + entite, 'error');
+      return;
+    }
+
+    // Initialiser mode BIS
+    AppState.startBisMode(parentKey, entite, year, month, quinzaine);
+    AppState.set('saisie.entite', entite);
+    AppState.set('saisie.lots', []);
+
+    Logger.info('Mode BIS ouvert', { entite, parentKey, periode: `${quinzaine} ${MOIS_APP[month]} ${year}` });
+    navigate('nouvelle');
+
+  } catch (e) {
+    Logger.error('Erreur ouverture mode BIS', { error: e.message, stack: e.stack });
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 function addLot() {
-  const entite = _saisieEntite;
-  if (!entite) { toast('Choisissez d\'abord l\'entité (INAM ou AMU) avant d\'ajouter un lot.', 'error'); return; }
-  const n = _lots.length + 1;
-  _lots.push({ numero: n, entite, bons: [] });
-  addBon(n); // premier bon automatique
+  const entite = AppState.get('saisie.entite');
+  if (!entite) {
+    Logger.warn('Tentative ajout lot sans entité', { entite });
+    toast('Choisissez d\'abord l\'entité (INAM ou AMU) avant d\'ajouter un lot.', 'error');
+    return;
+  }
+
+  const lots = AppState.get('saisie.lots');
+  const numero = lots.length + 1;
+  const newLot = { numero, entite, bons: [] };
+
+  AppState.addLot(newLot);
+  AppState.setAutosaveDirty(true);
+
+  Logger.info('Lot ajouté', { numero, entite });
+  addBon(numero); // premier bon automatique
   rerenderLotsBuilder();
   setTimeout(() => {
     const builder = document.getElementById('lots-builder');
@@ -1237,45 +1323,139 @@ function updateLotSubtotal(lotNum) {
 }
 
 function removeLot(num) {
-  if (!confirm(`Supprimer le LOT N°${num} et tous ses bons ?`)) return;
-  _lots = _lots.filter(l => l.numero !== num);
-  _lots.forEach((l, i) => l.numero = i + 1);
-  rerenderLotsBuilder();
-  if (!_detailEditingKey) autoSaveDraft();
+  if (!confirm(`Supprimer le LOT N°${num} et tous ses bons ?`)) {
+    Logger.debug('Suppression lot annulée', { lotNum: num });
+    return;
+  }
+
+  try {
+    const lots = AppState.get('saisie.lots');
+    const oldCount = lots.length;
+    const filtered = lots.filter(l => l.numero !== num);
+
+    // Renuméroter les lots
+    filtered.forEach((l, i) => { l.numero = i + 1; });
+
+    AppState.set('saisie.lots', filtered);
+    AppState.setAutosaveDirty(true);
+
+    Logger.info('Lot supprimé', { lotNum: num, remaining: filtered.length });
+    rerenderLotsBuilder();
+
+    const detailKey = AppState.get('saisie.editingKey');
+    if (!detailKey) autoSaveDraft();
+
+  } catch (e) {
+    Logger.error('Erreur suppression lot', { lotNum: num, error: e.message });
+    toast('Erreur suppression lot: ' + e.message, 'error');
+  }
 }
 
 async function saveNouvelle() {
-  const year      = parseInt(document.getElementById('new-year').value);
-  const month     = parseInt(document.getElementById('new-month').value);
-  const quinzaine = document.getElementById('new-quinzaine').value;
-  const bisCheck  = document.getElementById('new-bis').checked;
-  if (!year || !month || !quinzaine) { toast('Remplissez tous les champs','error'); return; }
-  if (!_lots.length) { toast('Ajoutez au moins un lot','error'); return; }
-
   try {
-    if (_bisMode) {
-      // Saisie BIS — entité connue via _bisMode
-      const key = getBisKey(_bisMode.parentKey, _bisMode.entite);
-      const existing = await getQuinzaineDocRef(key).get();
-      if (existing.exists && existing.data().brouillon !== true) { toast(`Une saisie BIS ${_bisMode.entite} existe déjà pour cette quinzaine.`, 'error'); return; }
-      await savePeriod({ year, month, quinzaine, entite: _bisMode.entite, entiteBis: _bisMode.entite, parentKey: _bisMode.parentKey, lots: _lots, brouillon: false, _key: key });
-      toast(`Saisie BIS ${_bisMode.entite} enregistrée ✓`, 'success');
-      logAction(`Saisie BIS ${_bisMode.entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
-      _bisMode = null;
-    } else {
-      // Saisie normale — entité obligatoire et indépendante
-      const entite = _saisieEntite;
-      if (!entite) { toast('Choisissez l\'entité (INAM ou AMU) avant d\'enregistrer.', 'error'); return; }
-      const existing = await getPeriod(year, month, quinzaine, entite);
-      if (existing && existing.brouillon !== true) { toast(`La quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} existe déjà.`, 'error'); return; }
-      await savePeriod({ year, month, quinzaine, entite, lots: _lots, brouillon: false });
-      toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} enregistrée ✓`, 'success');
-      logAction(`Nouvelle quinzaine ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name||'');
+    // 1. Récupérer et valider les champs période
+    const year = parseInt(document.getElementById('new-year').value);
+    const month = parseInt(document.getElementById('new-month').value);
+    const quinzaine = document.getElementById('new-quinzaine').value;
+
+    try {
+      Validation.requireNumber(year, 'Année', 2000, 2100);
+      Validation.requireNumber(month, 'Mois', 1, 12);
+      Validation.requireEnum(quinzaine, 'Quinzaine', [QUINZAINE.Q1, QUINZAINE.Q2]);
+    } catch (e) {
+      Logger.warn('Validation période échouée', { year, month, quinzaine, error: e.message });
+      toast(e.message, 'error');
+      return;
     }
-    _saisieEntite = null;
+
+    // 2. Vérifier qu'on a au moins un lot
+    const lots = AppState.get('saisie.lots');
+    if (!lots || !lots.length) {
+      Logger.warn('Tentative save sans lots');
+      toast('Ajoutez au moins un lot', 'error');
+      return;
+    }
+
+    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, nbLots: lots.length });
+
+    const bisMode = AppState.get('bisMode');
+
+    if (bisMode) {
+      // === MODE BIS ===
+      await saveNouvelleBis(bisMode, year, month, quinzaine, lots);
+    } else {
+      // === MODE NORMAL ===
+      await saveNouvelleNormal(year, month, quinzaine, lots);
+    }
+
+    // Nettoyage et redirection
+    AppState.set('saisie.entite', null);
+    AppState.set('saisie.lots', []);
+    AppState.endBisMode();
     clearDraft();
+
+    Logger.info('Saisie enregistrée avec succès');
     navigate('quinzaines');
-  } catch(e) { toast('Erreur sauvegarde: '+e.message,'error'); }
+
+  } catch (e) {
+    Logger.error('Erreur sauvegarde saisie', { error: e.message, stack: e.stack });
+    toast('Erreur sauvegarde: ' + e.message, 'error');
+  }
+}
+
+// Helper: Sauvegarder en mode BIS
+async function saveNouvelleBis(bisMode, year, month, quinzaine, lots) {
+  const key = getBisKey(bisMode.parentKey, bisMode.entite);
+  const existing = await getQuinzaineDocRef(key).get();
+
+  if (existing.exists && existing.data().brouillon !== true) {
+    const msg = `Une saisie BIS ${bisMode.entite} existe déjà pour cette quinzaine.`;
+    Logger.error('Conflit saisie BIS', { key, entite: bisMode.entite });
+    throw new Error(msg);
+  }
+
+  const entite = bisMode.entite;
+  await savePeriod({
+    year, month, quinzaine,
+    entite,
+    entiteBis: entite,
+    parentKey: bisMode.parentKey,
+    lots,
+    brouillon: false,
+    _key: key
+  });
+
+  toast(`Saisie BIS ${entite} enregistrée ✓`, 'success');
+  logAction(`Saisie BIS ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name || '');
+  Logger.info('Saisie BIS enregistrée', { entite, parentKey: bisMode.parentKey });
+}
+
+// Helper: Sauvegarder en mode NORMAL
+async function saveNouvelleNormal(year, month, quinzaine, lots) {
+  const entite = AppState.get('saisie.entite');
+
+  if (!entite) {
+    Logger.error('Entité manquante en mode normal');
+    throw new Error('Choisissez l\'entité (INAM ou AMU) avant d\'enregistrer.');
+  }
+
+  // Valider que c'est une entité valide
+  if (![ENTITY.INAM, ENTITY.AMU].includes(entite)) {
+    Logger.error('Entité invalide', { entite });
+    throw new Error('Entité invalide: ' + entite);
+  }
+
+  const existing = await getPeriod(year, month, quinzaine, entite);
+  if (existing && existing.brouillon !== true) {
+    const msg = `La quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} existe déjà.`;
+    Logger.error('Conflit quinzaine', { year, month, quinzaine, entite });
+    throw new Error(msg);
+  }
+
+  await savePeriod({ year, month, quinzaine, entite, lots, brouillon: false });
+  toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} enregistrée ✓`, 'success');
+  logAction(`Nouvelle quinzaine ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name || '');
+  Logger.info('Quinzaine enregistrée', { entite, quinzaine, year, month });
 }
 
 // ══════════════════════════════════════════════════════════════

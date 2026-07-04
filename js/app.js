@@ -1321,25 +1321,74 @@ function _getDraftFields() {
 function _saveLocalDraft() {
   try {
     const f = _getDraftFields();
-    if (!f.year || !f.month || !f.quinzaine || !_lots.length) return;
-    const draft = { ...f, entite: _saisieEntite, lots: _lots, savedAt: Date.now() };
-    localStorage.setItem(`draft_${_currentPharmacieId}`, JSON.stringify(draft));
-  } catch(e) {}
+    const lots = AppState.get('saisie.lots');
+    const entite = AppState.get('saisie.entite');
+    const pharmacyId = AppState.get('currentPharmacyId');
+
+    // Valider les données
+    if (!f.year || !f.month || !f.quinzaine || !lots || !lots.length) {
+      return;
+    }
+
+    const draft = {
+      ...f,
+      entite,
+      lots,
+      savedAt: Date.now()
+    };
+
+    localStorage.setItem(`draft_${pharmacyId}`, JSON.stringify(draft));
+    Logger.debug('Draft local sauvegardé', { year: f.year, month: f.month, quinzaine: f.quinzaine, nbLots: lots.length });
+
+  } catch (e) {
+    Logger.error('Erreur sauvegarde draft local', { error: e.message });
+  }
 }
 
 // Sauvegarde Firestore — synchronisée, toutes les 20s si données valides
 async function _saveFirestoreDraft() {
   try {
     const f = _getDraftFields();
-    if (!f.year || !f.month || !f.quinzaine || !_saisieEntite || !_lots.length) return;
-    const key = periodKey(f.year, f.month, f.quinzaine, _saisieEntite);
-    _currentDraftKey = key;
-    const period = recalcPeriod({ ...f, entite: _saisieEntite, lots: _lots, brouillon: true });
+    const lots = AppState.get('saisie.lots');
+    const entite = AppState.get('saisie.entite');
+
+    // Valider les données
+    if (!f.year || !f.month || !f.quinzaine || !entite || !lots || !lots.length) {
+      return;
+    }
+
+    // Clé du document
+    const key = periodKey(f.year, f.month, f.quinzaine, entite);
+
+    // Calculer la période (avec totaux)
+    const period = recalcPeriod({
+      ...f,
+      entite,
+      lots,
+      brouillon: true
+    });
+
+    // Timestamps
     period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-    if (!period.createdAt) period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    if (!period.createdAt) {
+      period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+
+    // Sauvegarder en Firestore
     await quinzainesRef().doc(key).set(period, { merge: true });
-    _showDraftIndicator('💾 Préenregistré ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}));
-  } catch(e) { /* silencieux */ }
+
+    // Mettre à jour la clé draft en AppState
+    AppState.recordFirestoreSave();
+
+    const timestamp = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    _showDraftIndicator('💾 Préenregistré ' + timestamp);
+
+    Logger.debug('Draft Firestore sauvegardé', { key, entite, nbLots: lots.length, timestamp });
+
+  } catch (e) {
+    Logger.error('Erreur sauvegarde draft Firestore', { error: e.message });
+    // Silencieux - on n'affiche pas l'erreur à l'utilisateur
+  }
 }
 
 function autoSaveDraft() {
@@ -1352,58 +1401,183 @@ function autoSaveDraft() {
 }
 
 async function clearDraft() {
-  try { localStorage.removeItem(`draft_${_currentPharmacieId}`); } catch(e) {}
-  // Supprimer le brouillon Firestore (on supprime le flag brouillon à l'enregistrement final)
-  if (_currentDraftKey) {
-    try { await quinzainesRef().doc(_currentDraftKey).update({ brouillon: false }); } catch(e) {}
-    _currentDraftKey = null;
+  try {
+    const pharmacyId = AppState.get('currentPharmacyId');
+
+    // Supprimer du localStorage
+    try {
+      localStorage.removeItem(`draft_${pharmacyId}`);
+      Logger.debug('Draft localStorage supprimé');
+    } catch (e) {
+      Logger.warn('Erreur suppression draft localStorage', { error: e.message });
+    }
+
+    // Marquer le brouillon comme "finalisé" en Firestore
+    // (on n'efface pas vraiment - on enlève juste le flag brouillon)
+    const draftKey = AppState.get('autosave.lastDraftKey');
+    if (draftKey) {
+      try {
+        await quinzainesRef().doc(draftKey).update({ brouillon: false });
+        Logger.debug('Draft Firestore finalisé', { key: draftKey });
+      } catch (e) {
+        Logger.warn('Erreur finalisation draft Firestore', { error: e.message });
+      }
+    }
+
+    // Réinitialiser l'état
+    AppState.set('autosave.lastDraftKey', null);
+    AppState.recordFirestoreSave(); // Marque que c'est à jour
+
+  } catch (e) {
+    Logger.error('Erreur clearDraft', { error: e.message });
   }
 }
 
 async function restoreDraft() {
-  if (_bisMode) return false;
   try {
-    // 1. Vérifier d'abord Firestore (source de vérité)
-    const snap = await quinzainesRef().where('brouillon','==',true).limit(5).get();
-    if (!snap.empty) {
-      const drafts = snap.docs.map(d => ({ key: d.id, ...d.data() }));
-      // Trier par updatedAt desc
-      drafts.sort((a,b) => {
-        const ta = a.updatedAt ? a.updatedAt.seconds : 0;
-        const tb = b.updatedAt ? b.updatedAt.seconds : 0;
-        return tb - ta;
-      });
-      const d = drafts[0];
-      const MOIS = ['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-      const label = `${d.entite||''} — ${d.quinzaine||''} ${MOIS[d.month]||''} ${d.year||''}`;
-      const ok = confirm(`Un brouillon non finalisé a été trouvé sur le serveur :\n${label}\n\nVoulez-vous reprendre cette saisie ?`);
-      if (!ok) {
-        // Marquer comme non-brouillon pour ne plus proposer
-        await quinzainesRef().doc(d.key).update({ brouillon: false });
-        localStorage.removeItem(`draft_${_currentPharmacieId}`);
-        return false;
-      }
-      _currentDraftKey = d.key;
-      _saisieEntite = d.entite || null;
-      _lots = d.lots || [];
-      document.getElementById('new-year').value  = d.year  || '';
-      document.getElementById('new-month').value = d.month || '';
-      document.getElementById('new-quinzaine').value = d.quinzaine || '';
-      renderLotsBuilder();
-      _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
-      toast('Brouillon serveur restauré ✓', 'success');
+    const bisMode = AppState.get('bisMode');
+    if (bisMode) {
+      Logger.debug('Restauration draft ignorée - mode BIS actif');
+      return false;
+    }
+
+    const pharmacyId = AppState.get('currentPharmacyId');
+
+    // 1. PRIORITÉ: Chercher draft Firestore (source de vérité)
+    Logger.info('Restauration draft: vérification Firestore');
+    const firebaseResult = await restoreDraftFromFirestore(pharmacyId);
+    if (firebaseResult) {
       return true;
     }
-    // 2. Fallback localStorage
-    const raw = localStorage.getItem(`draft_${_currentPharmacieId}`);
-    if (!raw) return false;
+
+    // 2. FALLBACK: Chercher draft localStorage
+    Logger.info('Restauration draft: vérification localStorage');
+    const localResult = await restoreDraftFromLocalStorage(pharmacyId);
+    return localResult;
+
+  } catch (e) {
+    Logger.error('Erreur restauration draft', { error: e.message, stack: e.stack });
+    return false;
+  }
+}
+
+// Helper: Restaurer depuis Firestore
+async function restoreDraftFromFirestore(pharmacyId) {
+  try {
+    const snap = await quinzainesRef().where('brouillon', '==', true).limit(5).get();
+    if (snap.empty) {
+      Logger.debug('Aucun draft Firestore trouvé');
+      return false;
+    }
+
+    // Trier par date décroissante
+    const drafts = snap.docs.map(d => ({ key: d.id, ...d.data() }));
+    drafts.sort((a, b) => {
+      const ta = a.updatedAt ? a.updatedAt.seconds : 0;
+      const tb = b.updatedAt ? b.updatedAt.seconds : 0;
+      return tb - ta;
+    });
+
+    const draft = drafts[0];
+    const label = formatDraftLabel(draft);
+
+    Logger.info('Draft Firestore trouvé', { label, key: draft.key });
+
+    const ok = confirm(`Un brouillon non finalisé a été trouvé sur le serveur :\n${label}\n\nVoulez-vous reprendre cette saisie ?`);
+
+    if (!ok) {
+      // Rejeter et marquer comme complété
+      Logger.info('Draft Firestore rejeté par l\'utilisateur');
+      await quinzainesRef().doc(draft.key).update({ brouillon: false });
+      localStorage.removeItem(`draft_${pharmacyId}`);
+      return false;
+    }
+
+    // Restaurer les données
+    loadDraftIntoForm(draft);
+    toast('Brouillon serveur restauré ✓', 'success');
+    Logger.info('Brouillon serveur restauré avec succès');
+    return true;
+
+  } catch (e) {
+    Logger.error('Erreur restauration Firestore', { error: e.message });
+    return false;
+  }
+}
+
+// Helper: Restaurer depuis localStorage
+async function restoreDraftFromLocalStorage(pharmacyId) {
+  try {
+    const raw = localStorage.getItem(`draft_${pharmacyId}`);
+    if (!raw) {
+      Logger.debug('Aucun draft localStorage trouvé');
+      return false;
+    }
+
     const draft = JSON.parse(raw);
-    if (!draft.lots || !draft.lots.length) return false;
+    if (!draft.lots || !draft.lots.length) {
+      Logger.debug('Draft localStorage invalide (lots manquants)');
+      return false;
+    }
+
     const age = Math.round((Date.now() - draft.savedAt) / 60000);
-    const ageLabel = age < 60 ? `il y a ${age} min` : `il y a ${Math.round(age/60)}h`;
-    const MOIS = ['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-    const ok = confirm(`Un brouillon local a été trouvé (${draft.entite||''} ${draft.quinzaine||''} ${MOIS[draft.month]||''} — ${ageLabel}).\n\nVoulez-vous le restaurer ?`);
-    if (!ok) { localStorage.removeItem(`draft_${_currentPharmacieId}`); return false; }
+    const ageLabel = age < 60 ? `il y a ${age} min` : `il y a ${Math.round(age / 60)}h`;
+    const label = formatDraftLabel(draft) + ' — ' + ageLabel;
+
+    Logger.info('Draft localStorage trouvé', { label, age });
+
+    const ok = confirm(`Un brouillon local a été trouvé :\n${label}\n\nVoulez-vous le restaurer ?`);
+
+    if (!ok) {
+      Logger.info('Draft localStorage rejeté par l\'utilisateur');
+      localStorage.removeItem(`draft_${pharmacyId}`);
+      return false;
+    }
+
+    // Restaurer les données
+    loadDraftIntoForm(draft);
+    toast('Brouillon local restauré ✓', 'success');
+    Logger.info('Brouillon local restauré avec succès');
+    return true;
+
+  } catch (e) {
+    Logger.error('Erreur restauration localStorage', { error: e.message });
+    return false;
+  }
+}
+
+// Helper: Charger le draft dans le formulaire et AppState
+function loadDraftIntoForm(draft) {
+  // Restaurer dans AppState
+  AppState.set('saisie.entite', draft.entite || null);
+  AppState.set('saisie.lots', draft.lots || []);
+
+  // Remplir les champs du formulaire
+  const yearEl = document.getElementById('new-year');
+  const monthEl = document.getElementById('new-month');
+  const quinzaineEl = document.getElementById('new-quinzaine');
+
+  if (yearEl) yearEl.value = draft.year || '';
+  if (monthEl) monthEl.value = draft.month || '';
+  if (quinzaineEl) quinzaineEl.value = draft.quinzaine || '';
+
+  // Re-render UI
+  renderLotsBuilder();
+
+  // Recalculer les sous-totaux
+  const lots = AppState.get('saisie.lots');
+  lots.forEach(l => {
+    if (l.entite) updateLotSubtotal(l.numero);
+  });
+
+  Logger.debug('Draft chargé en mémoire', { year: draft.year, month: draft.month, quinzaine: draft.quinzaine });
+}
+
+// Helper: Formater le label d'un draft
+function formatDraftLabel(draft) {
+  const MOIS = ['', 'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  return `${draft.entite || ''} — ${draft.quinzaine || ''} ${MOIS[draft.month] || ''} ${draft.year || ''}`;
+}
     _saisieEntite = draft.entite || null;
     _lots = draft.lots || [];
     document.getElementById('new-year').value  = draft.year  || '';

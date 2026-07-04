@@ -2511,10 +2511,20 @@ async function renderFournisseurs() {
 
 async function quickChangeStatutFacture(id, newStatut) {
   try {
+    // Valider le statut
+    Validation.requireEnum(newStatut, 'Statut', Object.values(FACTURE_STATUS));
+
+    Logger.info('Changement statut facture', { id, newStatut });
     await updateFacture(id, { statut: newStatut });
-    toast('Statut mis à jour ✓','success');
+
+    toast(`Statut mis à jour → ${FACTURE_STATUS_LABELS[newStatut]} ✓`, 'success');
+    Logger.info('Statut facture mis à jour avec succès', { id, newStatut });
     renderFournisseurs();
-  } catch(e) { toast('Erreur: '+e.message,'error'); }
+
+  } catch (e) {
+    Logger.error('Erreur changement statut facture', { id, newStatut, error: e.message });
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 async function exportFrsExcel() {
@@ -2614,19 +2624,30 @@ function onProspectiveChange() {
 }
 
 function openNewFacture() {
-  document.getElementById('facture-id').value = '';
-  ['facture-fournisseur','facture-date','facture-echeance','facture-designation','facture-obs','facture-mode','facture-ref'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
+  // Réinitialiser formulaire
+  const fields = ['facture-id', 'facture-fournisseur', 'facture-date', 'facture-echeance',
+                  'facture-designation', 'facture-obs', 'facture-mode', 'facture-ref'];
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
   });
+
   document.getElementById('facture-montant').value = 0;
-  document.getElementById('facture-statut').value  = 'non payé';
+  document.getElementById('facture-statut').value = FACTURE_STATUS.NON_PAYE;
+
+  // Masquer section alerte
   const prospEl = document.getElementById('facture-prospective');
-  if (prospEl) { prospEl.checked = false; }
+  if (prospEl) prospEl.checked = false;
+
   const alerteRow = document.getElementById('facture-alerte-row');
   if (alerteRow) alerteRow.style.display = 'none';
+
   const alerteJoursEl = document.getElementById('facture-alerte-jours');
   if (alerteJoursEl) alerteJoursEl.value = 7;
+
   document.getElementById('modal-facture-title').textContent = 'Nouvelle Facture';
+
+  Logger.debug('Ouverture modal nouvelle facture');
   refreshFrsDatalist();
   openModal('modal-facture');
 }
@@ -2657,27 +2678,66 @@ async function openEditFacture(id) {
 }
 
 async function saveFactureForm() {
-  const id          = document.getElementById('facture-id').value;
-  const fournisseur = document.getElementById('facture-fournisseur').value.trim();
-  const dateFacture = document.getElementById('facture-date').value;
-  const echeance    = document.getElementById('facture-echeance').value;
-  const montant     = parseFloat(document.getElementById('facture-montant').value)||0;
-  const designation = document.getElementById('facture-designation').value.trim();
-  const statut      = document.getElementById('facture-statut').value;
-  const note        = document.getElementById('facture-obs').value.trim();
-  const mode        = document.getElementById('facture-mode').value;
-  const ref         = document.getElementById('facture-ref').value.trim();
-  const prospective = document.getElementById('facture-prospective').checked;
-  const alerteJours = prospective ? (parseInt(document.getElementById('facture-alerte-jours').value)||7) : null;
-  if (!fournisseur || !montant) { toast('Remplissez fournisseur et montant','error'); return; }
   try {
+    // 1. Récupérer les données du formulaire
+    const id          = document.getElementById('facture-id').value;
+    const fournisseur = document.getElementById('facture-fournisseur').value.trim();
+    const dateFacture = document.getElementById('facture-date').value;
+    const echeance    = document.getElementById('facture-echeance').value;
+    const montant     = parseFloat(document.getElementById('facture-montant').value) || 0;
+    const designation = document.getElementById('facture-designation').value.trim();
+    const statut      = document.getElementById('facture-statut').value;
+    const note        = document.getElementById('facture-obs').value.trim();
+    const mode        = document.getElementById('facture-mode').value;
+    const ref         = document.getElementById('facture-ref').value.trim();
+    const prospective = document.getElementById('facture-prospective').checked;
+    const alerteJours = prospective ? (parseInt(document.getElementById('facture-alerte-jours').value) || 7) : null;
+
+    // 2. Valider les données
+    const facture = validateFacture({
+      fournisseur,
+      dateFacture,
+      echeance,
+      montant,
+      designation,
+      statut,
+      note,
+      mode,
+      ref,
+      prospective,
+      alerteJours
+    });
+
+    // 3. Récupérer les données existantes si édition
     const existing = id ? (await getAllFactures()).find(f => f.id === id) : null;
-    await saveFacture({ id: id||undefined, fournisseur, dateFacture, echeance, montant, designation, statut, note, mode, ref, prospective, alerteJours, montantPaye: existing ? (existing.montantPaye||0) : 0 });
+
+    // 4. Sauvegarder
+    Logger.info(`${id ? 'Modification' : 'Création'} facture`, { fournisseur, montant });
+    await saveFacture({
+      id: id || undefined,
+      ...facture,
+      montantPaye: existing ? (existing.montantPaye || 0) : 0
+    });
+
+    // 5. UI feedback
     closeModal();
-    toast('Facture enregistrée ✓','success');
-    logAction(id ? 'Modif facture' : 'Ajout facture', `${fournisseur} — ${montant} F`, currentUser?.name||'');
+    toast('Facture enregistrée ✓', 'success');
+    logAction(
+      id ? 'Modif facture' : 'Ajout facture',
+      `${fournisseur} — ${montant} F`,
+      currentUser?.name || ''
+    );
+    Logger.info('Facture enregistrée avec succès', { id: id || 'new', fournisseur });
     renderFournisseurs();
-  } catch(e) { toast('Erreur: '+e.message,'error'); }
+
+  } catch (e) {
+    if (e instanceof ValidationError) {
+      Logger.warn('Validation échouée facture', { field: e.field, error: e.message });
+    } else {
+      Logger.error('Erreur sauvegarde facture', { error: e.message, stack: e.stack });
+    }
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 async function openPayFacture(id) {
@@ -2697,12 +2757,29 @@ async function openPayFacture(id) {
 }
 
 async function doDeleteFacture(id) {
-  if (!confirm('Supprimer cette facture ?')) return;
+  if (!confirm('Supprimer cette facture ?')) {
+    Logger.debug('Suppression facture annulée par l\'utilisateur');
+    return;
+  }
+
   try {
-    await deleteFacture(id);
-    toast('Facture supprimée','success');
+    // Soft delete : marquer comme supprimée au lieu de vraiment supprimer
+    Logger.info('Soft delete facture', { id, deletedBy: currentUser?.uid });
+    await updateFacture(id, {
+      deleted: true,
+      deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      deletedBy: currentUser?.uid || 'unknown'
+    });
+
+    toast('Facture supprimée ✓', 'success');
+    logAction('Suppression facture', id, currentUser?.name || '');
+    Logger.info('Facture supprimée avec succès', { id });
     renderFournisseurs();
-  } catch(e) { toast('Erreur: '+e.message,'error'); }
+
+  } catch (e) {
+    Logger.error('Erreur suppression facture', { id, error: e.message, stack: e.stack });
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════

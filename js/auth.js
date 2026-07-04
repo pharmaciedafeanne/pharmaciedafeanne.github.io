@@ -13,33 +13,62 @@ async function login(email, password) {
 }
 
 async function loginByCode(pharmacieCode, password) {
-  const code = pharmacieCode.toUpperCase().trim();
-  // Lookup public index: loginCodes/{code} → { emails: [...] }
-  const idxDoc = await getDB().collection('loginCodes').doc(code).get();
-  let emails = idxDoc.exists ? (idxDoc.data().emails || []) : [];
+  try {
+    Logger.info('Tentative connexion', { code: pharmacieCode });
 
-  // Fallback: query users collection directly (si index pas encore créé)
-  if (!emails.length) {
-    const snap = await getDB().collection('users').where('pharmacieId','==', code).get();
-    emails = snap.docs.map(d => d.data().email).filter(Boolean);
-  }
-  if (!emails.length) throw new Error('Code pharmacie introuvable. Vérifiez le code.');
-
-  let lastError = null;
-  for (const email of emails) {
-    try {
-      const cred = await getAuth().signInWithEmailAndPassword(email, password);
-      const profile = await getUserProfile(cred.user.uid);
-      if (!profile) { await getAuth().signOut(); continue; }
-      currentUser = { uid: cred.user.uid, email: cred.user.email, ...profile };
-      return currentUser;
-    } catch(e) {
-      const wrongPwd = ['auth/wrong-password','auth/invalid-credential','auth/invalid-login-credentials'];
-      if (wrongPwd.includes(e.code)) { lastError = e; continue; }
-      throw e;
+    const code = pharmacieCode.toUpperCase().trim();
+    if (!code || !password) {
+      throw new Error('Code et mot de passe requis');
     }
+
+    // Lookup public index: loginCodes/{code} → { emails: [...] }
+    const idxDoc = await getDB().collection('loginCodes').doc(code).get();
+    let emails = idxDoc.exists ? (idxDoc.data().emails || []) : [];
+
+    // Fallback: query users collection directly (si index pas encore créé)
+    if (!emails.length) {
+      const snap = await getDB().collection('users').where('pharmacieId','==', code).get();
+      emails = snap.docs.map(d => d.data().email).filter(Boolean);
+    }
+
+    if (!emails.length) {
+      Logger.warn('Code pharmacie non trouvé', { code });
+      throw new Error('Code pharmacie introuvable. Vérifiez le code.');
+    }
+
+    let lastError = null;
+    for (const email of emails) {
+      try {
+        const cred = await getAuth().signInWithEmailAndPassword(email, password);
+        const profile = await getUserProfile(cred.user.uid);
+
+        if (!profile) {
+          Logger.warn('Profil utilisateur non trouvé', { uid: cred.user.uid });
+          await getAuth().signOut();
+          continue;
+        }
+
+        currentUser = { uid: cred.user.uid, email: cred.user.email, ...profile };
+        Logger.info('Connexion réussie', { uid: currentUser.uid, role: currentUser.role });
+        return currentUser;
+
+      } catch(e) {
+        const wrongPwd = ['auth/wrong-password','auth/invalid-credential','auth/invalid-login-credentials'];
+        if (wrongPwd.includes(e.code)) {
+          lastError = e;
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    Logger.error('Mot de passe incorrect pour tous les comptes', { code, nbEmails: emails.length });
+    throw new Error('Mot de passe incorrect.');
+
+  } catch (e) {
+    Logger.error('Erreur connexion', { error: e.message, code: pharmacieCode });
+    throw e;
   }
-  throw new Error('Mot de passe incorrect.');
 }
 
 async function updateLoginCodesIndex(pharmacieId, email) {
@@ -55,8 +84,20 @@ async function removeFromLoginCodesIndex(pharmacieId, email) {
 }
 
 async function logout() {
-  await getAuth().signOut();
-  currentUser = null;
+  try {
+    Logger.info('Déconnexion utilisateur', { uid: currentUser?.uid || 'unknown' });
+    logAction('Déconnexion', '', currentUser?.name || '');
+
+    await getAuth().signOut();
+    currentUser = null;
+
+    Logger.info('Déconnexion réussie');
+
+  } catch (e) {
+    Logger.error('Erreur déconnexion', { error: e.message });
+    currentUser = null; // Forcer la déconnexion même en cas d'erreur
+    throw e;
+  }
 }
 
 // Écoute des changements d'état d'auth Firebase
@@ -81,18 +122,42 @@ function onAuthReady(callback) {
 // ── Gestion des comptes (Super Admin) ────────────────────────────────
 
 async function createAccount(name, email, password, role, pharmacieId) {
-  const secondary = firebase.initializeApp(FIREBASE_CONFIG, 'secondary_' + Date.now());
-  let uid;
   try {
-    const cred = await secondary.auth().createUserWithEmailAndPassword(email, password);
-    uid = cred.user.uid;
-    await secondary.auth().signOut();
-  } finally {
-    await secondary.delete();
+    // Valider les champs requis
+    if (!name || !email || !password) {
+      throw new Error('Nom, email et mot de passe requis');
+    }
+
+    Logger.info('Création compte', { name, email, role, pharmacieId });
+
+    const secondary = firebase.initializeApp(FIREBASE_CONFIG, 'secondary_' + Date.now());
+    let uid;
+
+    try {
+      const cred = await secondary.auth().createUserWithEmailAndPassword(email, password);
+      uid = cred.user.uid;
+      await secondary.auth().signOut();
+    } finally {
+      await secondary.delete();
+    }
+
+    // Créer le profil utilisateur
+    await createUserProfile(uid, { name, email, role, pharmacieId: pharmacieId || null });
+
+    // Mettre à jour l'index de connexion
+    if (pharmacieId) {
+      await updateLoginCodesIndex(pharmacieId, email);
+    }
+
+    Logger.info('Compte créé', { uid, email, role });
+    logAction('Création compte', `${email} (${role})`, currentUser?.name || '');
+
+    return uid;
+
+  } catch (e) {
+    Logger.error('Erreur création compte', { name, email, role, error: e.message });
+    throw e;
   }
-  await createUserProfile(uid, { name, email, role, pharmacieId: pharmacieId || null });
-  if (pharmacieId) await updateLoginCodesIndex(pharmacieId, email);
-  return uid;
 }
 
 async function updateAccount(uid, updates) {

@@ -3205,6 +3205,7 @@ async function openEditFacture(id) {
   document.getElementById('facture-montant').value     = f.montant     || 0;
   document.getElementById('facture-designation').value = f.designation || '';
   document.getElementById('facture-statut').value      = f.statut      || 'non payé';
+  document.getElementById('facture-date-paye').value   = f.datePaye    || '';
   document.getElementById('facture-obs').value         = f.note        || '';
   document.getElementById('facture-mode').value        = f.mode        || '';
   document.getElementById('facture-ref').value         = f.ref         || '';
@@ -3229,6 +3230,7 @@ async function saveFactureForm() {
     const montant     = parseFloat(document.getElementById('facture-montant').value) || 0;
     const designation = document.getElementById('facture-designation').value.trim();
     const statut      = document.getElementById('facture-statut').value;
+    const datePaye    = document.getElementById('facture-date-paye').value;
     const note        = document.getElementById('facture-obs').value.trim();
     const mode        = document.getElementById('facture-mode').value;
     const ref         = document.getElementById('facture-ref').value.trim();
@@ -3243,6 +3245,7 @@ async function saveFactureForm() {
       montant,
       designation,
       statut,
+      datePaye,
       note,
       mode,
       ref,

@@ -769,8 +769,26 @@ let _bisMode = null;       // null | { parentKey, entite, year, month, quinzaine
 let _saisieEntite = null;  // 'INAM' | 'AMU' — verrouillée pour toute la saisie
 
 function setSaisieEntite(entite) {
-  _saisieEntite = entite;
-  renderLotsBuilder();
+  try {
+    // Valider entité
+    const validEntities = [ENTITY.INAM, ENTITY.AMU];
+    if (!validEntities.includes(entite)) {
+      Logger.error('Entité invalide dans setSaisieEntite', { entite, valid: validEntities });
+      toast('Entité invalide: ' + entite, 'error');
+      return;
+    }
+
+    // Définir l'entité dans AppState
+    AppState.set('saisie.entite', entite);
+    AppState.setAutosaveDirty(true);
+
+    Logger.info('Entité saisie sélectionnée', { entite });
+    renderLotsBuilder();
+
+  } catch (e) {
+    Logger.error('Erreur setSaisieEntite', { entite, error: e.message });
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 function renderNouvelle() {
@@ -920,67 +938,171 @@ function addLot() {
 }
 
 function setLotEntite(lotNum, entite) {
-  const lot = _lots.find(l => l.numero === lotNum);
-  if (!lot) return;
-  lot.entite = entite;
-  renderLotsBuilder();
-  addBon(lotNum); // premier bon automatique
+  try {
+    const lots = AppState.get('saisie.lots');
+    const lot = lots.find(l => l.numero === lotNum);
+
+    if (!lot) {
+      Logger.warn('Lot non trouvé pour setLotEntite', { lotNum });
+      return;
+    }
+
+    // Valider entité
+    if (![ENTITY.INAM, ENTITY.AMU].includes(entite)) {
+      Logger.error('Entité invalide', { lotNum, entite });
+      return;
+    }
+
+    lot.entite = entite;
+    AppState.set('saisie.lots', lots);
+    AppState.setAutosaveDirty(true);
+
+    Logger.info('Entité lot modifiée', { lotNum, entite });
+    renderLotsBuilder();
+    addBon(lotNum); // premier bon automatique
+
+  } catch (e) {
+    Logger.error('Erreur setLotEntite', { lotNum, entite, error: e.message });
+  }
 }
 
 function add10Bons(lotNum) {
-  const lot = _lots.find(l => l.numero === lotNum);
-  if (!lot || !lot.entite) return;
-  const places = 10 - lot.bons.length;
-  if (places <= 0) { toast(`⚠️ LOT N°${lot.numero} déjà complet.`, 'info'); return; }
-  for (let i = 0; i < places; i++) addBon(lotNum);
+  try {
+    const lots = AppState.get('saisie.lots');
+    const lot = lots.find(l => l.numero === lotNum);
+
+    if (!lot) {
+      Logger.warn('Lot non trouvé pour add10Bons', { lotNum });
+      return;
+    }
+
+    if (!lot.entite) {
+      Logger.warn('Lot sans entité', { lotNum });
+      toast('Sélectionnez d\'abord l\'entité du lot', 'error');
+      return;
+    }
+
+    const placesLeft = 10 - lot.bons.length;
+    if (placesLeft <= 0) {
+      Logger.info('Lot déjà complet', { lotNum, bonCount: lot.bons.length });
+      toast(`⚠️ LOT N°${lot.numero} déjà complet (10/10 bons).`, 'info');
+      return;
+    }
+
+    Logger.info('Ajout 10 bons demandé', { lotNum, placesLeft });
+    for (let i = 0; i < placesLeft; i++) {
+      addBon(lotNum);
+    }
+
+  } catch (e) {
+    Logger.error('Erreur add10Bons', { lotNum, error: e.message });
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 function addBon(lotNum) {
-  const lot = _lots.find(l => l.numero === lotNum);
-  if (!lot || !lot.entite) return;
-  if (lot.bons.length >= 10) {
-    toast(`⚠️ LOT N°${lot.numero} (${lot.entite}) a atteint 10 bons. Créez un nouveau lot pour continuer.`, 'info');
-    return;
-  }
-  const bonNum = lot.bons.length + 1;
-  const bon = {
-    id: `bon_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
-    numero: bonNum,
-    label: `BON N°${bonNum}`,
-    dafeanne: { inam: 0, amu: 0 },
-    depot:    { inam: 0, amu: 0 },
-    remarque: ''
-  };
-  lot.bons.push(bon);
+  try {
+    const lots = AppState.get('saisie.lots');
+    const lot = lots.find(l => l.numero === lotNum);
 
-  const tbody = document.getElementById(`bon-rows-${lotNum}`);
-  if (tbody) {
-    tbody.insertAdjacentHTML('beforeend', bonRow(lotNum, bon, lot.entite));
-    const header = tbody.closest('.lot-card').querySelector('.lot-header h4');
-    if (header) header.innerHTML = lotHeaderLabel(lot);
-    tbody.lastElementChild.querySelector('input[type="number"]')?.focus();
-  } else {
-    renderLotsBuilder();
+    if (!lot) {
+      Logger.warn('Lot non trouvé pour addBon', { lotNum });
+      return;
+    }
+
+    if (!lot.entite) {
+      Logger.warn('Lot sans entité', { lotNum });
+      return;
+    }
+
+    // Vérifier limite 10 bons
+    if (lot.bons.length >= 10) {
+      Logger.info('Lot complet', { lotNum, bonCount: lot.bons.length });
+      toast(`⚠️ LOT N°${lot.numero} (${lot.entite}) a atteint 10 bons. Créez un nouveau lot pour continuer.`, 'info');
+      return;
+    }
+
+    // Créer le bon
+    const bonNum = lot.bons.length + 1;
+    const bon = {
+      id: `bon_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      numero: bonNum,
+      label: `BON N°${bonNum}`,
+      dafeanne: { inam: 0, amu: 0 },
+      depot: { inam: 0, amu: 0 },
+      remarque: ''
+    };
+
+    lot.bons.push(bon);
+    AppState.set('saisie.lots', lots);
+    AppState.setAutosaveDirty(true);
+
+    Logger.info('Bon ajouté', { lotNum, bonNum, bonId: bon.id });
+
+    // Update DOM
+    const tbody = document.getElementById(`bon-rows-${lotNum}`);
+    if (tbody) {
+      tbody.insertAdjacentHTML('beforeend', bonRow(lotNum, bon, lot.entite));
+      const header = tbody.closest('.lot-card').querySelector('.lot-header h4');
+      if (header) header.innerHTML = lotHeaderLabel(lot);
+      tbody.lastElementChild.querySelector('input[type="number"]')?.focus();
+    } else {
+      renderLotsBuilder();
+    }
+
+  } catch (e) {
+    Logger.error('Erreur addBon', { lotNum, error: e.message });
   }
 }
 
 function removeBon(lotNum, bonId) {
-  const lot = _lots.find(l => l.numero === lotNum);
-  if (!lot) return;
-  lot.bons = lot.bons.filter(b => String(b.id) !== String(bonId));
-  lot.bons.forEach((b, i) => { b.numero = i + 1; b.label = `BON N°${i + 1}`; });
-  document.getElementById(`row-${bonId}`)?.remove();
-  const tbody = document.getElementById(`bon-rows-${lotNum}`);
-  if (tbody) {
-    tbody.querySelectorAll('tr').forEach((tr, i) => {
-      const strong = tr.querySelector('td:first-child strong');
-      if (strong) strong.textContent = `BON N°${i + 1}`;
+  try {
+    const lots = AppState.get('saisie.lots');
+    const lot = lots.find(l => l.numero === lotNum);
+
+    if (!lot) {
+      Logger.warn('Lot non trouvé pour removeBon', { lotNum });
+      return;
+    }
+
+    const oldCount = lot.bons.length;
+
+    // Filtrer le bon
+    lot.bons = lot.bons.filter(b => String(b.id) !== String(bonId));
+
+    // Renuméroter les bons restants
+    lot.bons.forEach((b, i) => {
+      b.numero = i + 1;
+      b.label = `BON N°${i + 1}`;
     });
-    const header = tbody.closest('.lot-card').querySelector('.lot-header h4');
-    if (header) header.innerHTML = `LOT N°${lot.numero} <span style="font-weight:400;font-size:12px;opacity:.7">(${lot.bons.length} bon${lot.bons.length > 1 ? 's' : ''})</span>`;
+
+    AppState.set('saisie.lots', lots);
+    AppState.setAutosaveDirty(true);
+
+    Logger.info('Bon supprimé', { lotNum, bonId, remaining: lot.bons.length });
+
+    // Update DOM
+    document.getElementById(`row-${bonId}`)?.remove();
+    const tbody = document.getElementById(`bon-rows-${lotNum}`);
+    if (tbody) {
+      // Renumeroter les numéros visuels
+      tbody.querySelectorAll('tr').forEach((tr, i) => {
+        const strong = tr.querySelector('td:first-child strong');
+        if (strong) strong.textContent = `BON N°${i + 1}`;
+      });
+
+      // Mettre à jour le header du lot
+      const header = tbody.closest('.lot-card').querySelector('.lot-header h4');
+      if (header) header.innerHTML = lotHeaderLabel(lot);
+    }
+
+    updateLotSubtotal(lotNum);
+    autoSaveDraft();
+
+  } catch (e) {
+    Logger.error('Erreur removeBon', { lotNum, bonId, error: e.message });
+    toast('Erreur suppression bon: ' + e.message, 'error');
   }
-  updateLotSubtotal(lotNum);
-  autoSaveDraft();
 }
 
 function lotHeaderLabel(lot) {
@@ -1295,31 +1417,81 @@ async function restoreDraft() {
 }
 
 function updateCell(input) {
-  const { lot: lotN, bon: bonId, account, field } = input.dataset;
-  const lotNum = parseInt(lotN);
-  const lot = _lots.find(l => l.numero === lotNum);
-  const bon = lot && lot.bons.find(b => String(b.id) === String(bonId));
-  if (!bon) return;
-  if (account === 'remarque') { bon.remarque = input.value; }
-  else { bon[account][field] = parseFloat(input.value) || 0; }
-  updateLotSubtotal(lotNum);
-  autoSaveDraft();
+  try {
+    const { lot: lotN, bon: bonId, account, field } = input.dataset;
+    const lotNum = parseInt(lotN);
+
+    const lots = AppState.get('saisie.lots');
+    const lot = lots.find(l => l.numero === lotNum);
+
+    if (!lot) {
+      Logger.warn('Lot non trouvé pour updateCell', { lotNum });
+      return;
+    }
+
+    const bon = lot.bons.find(b => String(b.id) === String(bonId));
+    if (!bon) {
+      Logger.warn('Bon non trouvé pour updateCell', { lotNum, bonId });
+      return;
+    }
+
+    // Mettre à jour la valeur
+    if (account === 'remarque') {
+      bon.remarque = input.value;
+    } else {
+      const newVal = parseFloat(input.value) || 0;
+      bon[account][field] = newVal;
+    }
+
+    AppState.set('saisie.lots', lots);
+    AppState.setAutosaveDirty(true);
+
+    Logger.debug('Cell mise à jour', { lotNum, bonId, account, field });
+    updateLotSubtotal(lotNum);
+    autoSaveDraft();
+
+  } catch (e) {
+    Logger.error('Erreur updateCell', { error: e.message });
+  }
 }
 
 function updateLotSubtotal(lotNum) {
-  const lot = _lots.find(l => l.numero === lotNum);
-  if (!lot || !lot.entite) return;
-  const e = lot.entite.toLowerCase();
-  let dfVal=0, dpVal=0;
-  lot.bons.forEach(b => {
-    dfVal += (b.dafeanne && b.dafeanne[e]) || 0;
-    dpVal += (b.depot    && b.depot[e])    || 0;
-  });
-  const total = dfVal + dpVal;
-  const s = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = fmtA(val); };
-  s(`st-${lotNum}-df`,    dfVal);
-  s(`st-${lotNum}-dp`,    dpVal);
-  s(`st-${lotNum}-total`, total);
+  try {
+    const lots = AppState.get('saisie.lots');
+    const lot = lots.find(l => l.numero === lotNum);
+
+    if (!lot || !lot.entite) {
+      Logger.debug('Lot non trouvé ou sans entité pour updateLotSubtotal', { lotNum });
+      return;
+    }
+
+    const e = lot.entite.toLowerCase();
+    let dfVal = 0, dpVal = 0;
+
+    // Calculer les sous-totaux
+    lot.bons.forEach(b => {
+      dfVal += (b.dafeanne && b.dafeanne[e]) || 0;
+      dpVal += (b.depot && b.depot[e]) || 0;
+    });
+
+    const total = dfVal + dpVal;
+
+    // Helper pour mettre à jour le DOM
+    const updateElement = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = fmtA(val);
+    };
+
+    // Mettre à jour les cellules
+    updateElement(`st-${lotNum}-df`, dfVal);
+    updateElement(`st-${lotNum}-dp`, dpVal);
+    updateElement(`st-${lotNum}-total`, total);
+
+    Logger.debug('Sous-totaux lot mis à jour', { lotNum, dafeanne: dfVal, depot: dpVal, total });
+
+  } catch (e) {
+    Logger.error('Erreur updateLotSubtotal', { lotNum, error: e.message });
+  }
 }
 
 function removeLot(num) {

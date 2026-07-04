@@ -12,38 +12,60 @@ function getPharmacieId() { return _currentPharmacieId; }
 // ── Calculs ──────────────────────────────────────────────────────────
 
 function recalcPeriod(period) {
-  const t = {
-    dafeanne: { inam: 0, amu: 0, total: 0 },
-    depot:    { inam: 0, amu: 0, total: 0 },
-    inam: 0, amu: 0, global: 0
-  };
-
-  (period.lots || []).forEach(lot => {
-    const lt = {
-      dafeanne: { inam: 0, amu: 0 },
-      depot:    { inam: 0, amu: 0 }
+  try {
+    // Initialiser structure totaux
+    const totaux = {
+      dafeanne: { inam: 0, amu: 0, total: 0 },
+      depot:    { inam: 0, amu: 0, total: 0 },
+      inam: 0, amu: 0, global: 0
     };
-    (lot.bons || []).forEach(bon => {
-      lt.dafeanne.inam += (bon.dafeanne && bon.dafeanne.inam) || 0;
-      lt.dafeanne.amu  += (bon.dafeanne && bon.dafeanne.amu)  || 0;
-      lt.depot.inam    += (bon.depot    && bon.depot.inam)    || 0;
-      lt.depot.amu     += (bon.depot    && bon.depot.amu)     || 0;
+
+    // Parcourir les lots et calculer les sous-totaux
+    (period.lots || []).forEach(lot => {
+      const lotTotaux = {
+        dafeanne: { inam: 0, amu: 0 },
+        depot: { inam: 0, amu: 0 }
+      };
+
+      // Parcourir les bons et accumuler les valeurs
+      (lot.bons || []).forEach(bon => {
+        lotTotaux.dafeanne.inam += (bon.dafeanne?.inam) || 0;
+        lotTotaux.dafeanne.amu  += (bon.dafeanne?.amu) || 0;
+        lotTotaux.depot.inam    += (bon.depot?.inam) || 0;
+        lotTotaux.depot.amu     += (bon.depot?.amu) || 0;
+      });
+
+      lot.totaux = lotTotaux;
+
+      // Ajouter aux totaux globaux
+      totaux.dafeanne.inam += lotTotaux.dafeanne.inam;
+      totaux.dafeanne.amu  += lotTotaux.dafeanne.amu;
+      totaux.depot.inam    += lotTotaux.depot.inam;
+      totaux.depot.amu     += lotTotaux.depot.amu;
     });
-    lot.totaux = lt;
-    t.dafeanne.inam += lt.dafeanne.inam;
-    t.dafeanne.amu  += lt.dafeanne.amu;
-    t.depot.inam    += lt.depot.inam;
-    t.depot.amu     += lt.depot.amu;
-  });
 
-  t.dafeanne.total = t.dafeanne.inam + t.dafeanne.amu;
-  t.depot.total    = t.depot.inam    + t.depot.amu;
-  t.inam           = t.dafeanne.inam + t.depot.inam;
-  t.amu            = t.dafeanne.amu  + t.depot.amu;
-  t.global         = t.inam + t.amu;
+    // Calculer les totaux finaux
+    totaux.dafeanne.total = totaux.dafeanne.inam + totaux.dafeanne.amu;
+    totaux.depot.total    = totaux.depot.inam + totaux.depot.amu;
+    totaux.inam           = totaux.dafeanne.inam + totaux.depot.inam;
+    totaux.amu            = totaux.dafeanne.amu + totaux.depot.amu;
+    totaux.global         = totaux.inam + totaux.amu;
 
-  period.totaux = t;
-  return period;
+    period.totaux = totaux;
+
+    Logger.debug('recalcPeriod: calcul complété', {
+      nbLots: period.lots?.length || 0,
+      global: totaux.global,
+      inam: totaux.inam,
+      amu: totaux.amu
+    });
+
+    return period;
+
+  } catch (e) {
+    Logger.error('Erreur recalcPeriod', { error: e.message, period: period?.entite || '?' });
+    throw e;
+  }
 }
 
 function periodKey(year, month, quinzaine, entite) {
@@ -127,37 +149,119 @@ async function migrateRootQuinzaines() {
 // ── Quinzaines ───────────────────────────────────────────────────────
 
 async function savePeriod(period) {
-  period = recalcPeriod(period);
-  const key = period._key || periodKey(period.year, period.month, period.quinzaine, period.entite);
-  delete period._key;
-  period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-  if (!period.createdAt) period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-  // Si brouillon est false, on force la mise à jour pour bien remplacer le flag
-  if (period.brouillon === false) {
-    await quinzainesRef().doc(key).set(period, { merge: true });
-    // Forcer la mise à jour du flag brouillon
-    await quinzainesRef().doc(key).update({ brouillon: false });
-  } else {
-    await quinzainesRef().doc(key).set(period, { merge: true });
+  try {
+    // Valider les champs essentiels
+    if (!period.year || !period.month || !period.quinzaine || !period.entite) {
+      const msg = 'Champs requis manquants: year, month, quinzaine, entite';
+      Logger.error('savePeriod validation failed', { period });
+      throw new Error(msg);
+    }
+
+    // Recalculer les totaux
+    period = recalcPeriod(period);
+
+    // Générer la clé du document
+    const key = period._key || periodKey(period.year, period.month, period.quinzaine, period.entite);
+    delete period._key;
+
+    // Ajouter les timestamps
+    period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    if (!period.createdAt) {
+      period.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+
+    Logger.info('Sauvegarde période', {
+      key,
+      entite: period.entite,
+      quinzaine: period.quinzaine,
+      nbLots: period.lots?.length || 0,
+      brouillon: period.brouillon
+    });
+
+    // Sauvegarder
+    if (period.brouillon === false) {
+      // Finalisation: set + update pour bien forcer le flag brouillon=false
+      await quinzainesRef().doc(key).set(period, { merge: true });
+      await quinzainesRef().doc(key).update({ brouillon: false });
+    } else {
+      await quinzainesRef().doc(key).set(period, { merge: true });
+    }
+
+    Logger.info('Période sauvegardée', { key });
+    return { key, ...period };
+
+  } catch (e) {
+    Logger.error('Erreur savePeriod', { error: e.message, period: period?.entite, stack: e.stack });
+    throw e;
   }
-  return { key, ...period };
 }
 
 async function getPeriod(year, month, quinzaine, entite) {
-  const doc = await quinzainesRef().doc(periodKey(year, month, quinzaine, entite)).get();
-  return doc.exists ? { key: doc.id, ...doc.data() } : null;
+  try {
+    Logger.debug('Chargement période', { year, month, quinzaine, entite });
+
+    const key = periodKey(year, month, quinzaine, entite);
+    const doc = await quinzainesRef().doc(key).get();
+
+    if (!doc.exists) {
+      Logger.debug('Période non trouvée', { key });
+      return null;
+    }
+
+    const data = doc.data();
+
+    // Ignorer si soft-deleted
+    if (data.deleted) {
+      Logger.debug('Période supprimée (ignorée)', { key });
+      return null;
+    }
+
+    Logger.debug('Période trouvée', { key });
+    return { key: doc.id, ...data };
+
+  } catch (e) {
+    Logger.error('Erreur getPeriod', { year, month, quinzaine, entite, error: e.message });
+    throw e;
+  }
 }
 
 async function getAllPeriods() {
-  const snap = await quinzainesRef().get();
-  return snap.docs
-    .map(d => ({ key: d.id, ...d.data() }))
-    .filter(p => !p.brouillon) // exclure les brouillons non finalisés
-    .sort((a, b) => b.year - a.year || b.month - a.month || b.quinzaine.localeCompare(a.quinzaine));
+  try {
+    Logger.debug('Chargement toutes périodes');
+
+    const snap = await quinzainesRef().get();
+    const periods = snap.docs
+      .map(d => ({ key: d.id, ...d.data() }))
+      .filter(p => !p.brouillon && !p.deleted) // exclure brouillons et soft-deleted
+      .sort((a, b) => b.year - a.year || b.month - a.month || b.quinzaine.localeCompare(a.quinzaine));
+
+    Logger.info('Périodes chargées', { count: periods.length });
+    return periods;
+
+  } catch (e) {
+    Logger.error('Erreur getAllPeriods', { error: e.message });
+    throw e;
+  }
 }
 
 async function deletePeriod(key) {
-  await quinzainesRef().doc(key).delete();
+  try {
+    Logger.info('Soft delete période', { key });
+
+    // Soft delete: marquer comme supprimée au lieu de vraiment supprimer
+    await quinzainesRef().doc(key).update({
+      deleted: true,
+      deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      deletedBy: currentUser?.uid || 'unknown'
+    });
+
+    Logger.info('Période supprimée (soft delete)', { key });
+    logAction('Suppression quinzaine', key, currentUser?.name || '');
+
+  } catch (e) {
+    Logger.error('Erreur deletePeriod', { key, error: e.message });
+    throw e;
+  }
 }
 
 async function getGlobalStats() {
@@ -306,29 +410,94 @@ function facturesRef(pharmacieId) {
 }
 
 async function saveFacture(data) {
-  const ref = data.id ? facturesRef().doc(data.id) : facturesRef().doc();
-  const id = ref.id;
-  await ref.set({ ...data, id, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
-  return id;
+  try {
+    // Valider champs requis
+    if (!data.fournisseur) throw new Error('Fournisseur requis');
+    if (data.montant === undefined || data.montant === null) throw new Error('Montant requis');
+
+    const ref = data.id ? facturesRef().doc(data.id) : facturesRef().doc();
+    const id = ref.id;
+
+    const factureData = {
+      ...data,
+      id,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (!data.id) {
+      factureData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+
+    Logger.info('Sauvegarde facture', { id, fournisseur: data.fournisseur, montant: data.montant });
+    await ref.set(factureData, { merge: true });
+    Logger.info('Facture sauvegardée', { id });
+
+    return id;
+
+  } catch (e) {
+    Logger.error('Erreur saveFacture', { error: e.message, fournisseur: data?.fournisseur });
+    throw e;
+  }
 }
 
 async function getAllFactures() {
-  const snap = await facturesRef().get();
-  const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  list.sort((a, b) => {
-    const da = a.dateFacture || '';
-    const db = b.dateFacture || '';
-    return db.localeCompare(da);
-  });
-  return list;
+  try {
+    Logger.debug('Chargement toutes factures');
+
+    const snap = await facturesRef().get();
+    const list = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(f => !f.deleted) // exclure soft-deleted
+      .sort((a, b) => {
+        const da = a.dateFacture || '';
+        const db = b.dateFacture || '';
+        return db.localeCompare(da);
+      });
+
+    Logger.info('Factures chargées', { count: list.length });
+    return list;
+
+  } catch (e) {
+    Logger.error('Erreur getAllFactures', { error: e.message });
+    throw e;
+  }
 }
 
 async function updateFacture(id, data) {
-  await facturesRef().doc(id).update({ ...data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  try {
+    Logger.info('Modification facture', { id, changes: Object.keys(data) });
+
+    await facturesRef().doc(id).update({
+      ...data,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    Logger.info('Facture modifiée', { id });
+
+  } catch (e) {
+    Logger.error('Erreur updateFacture', { id, error: e.message });
+    throw e;
+  }
 }
 
 async function deleteFacture(id) {
-  await facturesRef().doc(id).delete();
+  try {
+    Logger.info('Soft delete facture', { id });
+
+    // Soft delete
+    await facturesRef().doc(id).update({
+      deleted: true,
+      deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      deletedBy: currentUser?.uid || 'unknown'
+    });
+
+    Logger.info('Facture supprimée (soft delete)', { id });
+    logAction('Suppression facture', id, currentUser?.name || '');
+
+  } catch (e) {
+    Logger.error('Erreur deleteFacture', { id, error: e.message });
+    throw e;
+  }
 }
 
 // Retourne les factures dont l'échéance est dans les prochaines `hours` heures
@@ -359,14 +528,41 @@ async function getAllCatalogueFrs() {
 }
 
 async function saveCatalogueFrs(data) {
-  const ref = data.id ? catalogueFrsRef().doc(data.id) : catalogueFrsRef().doc();
-  const { id, ...rest } = data;
-  await ref.set(rest, { merge: true });
-  return ref.id;
+  try {
+    if (!data.nom) throw new Error('Nom fournisseur requis');
+
+    const ref = data.id ? catalogueFrsRef().doc(data.id) : catalogueFrsRef().doc();
+    const { id, ...rest } = data;
+
+    Logger.info('Sauvegarde fournisseur catalogue', { nom: data.nom });
+    await ref.set(rest, { merge: true });
+    Logger.info('Fournisseur sauvegardé', { id: ref.id });
+
+    return ref.id;
+
+  } catch (e) {
+    Logger.error('Erreur saveCatalogueFrs', { nom: data?.nom, error: e.message });
+    throw e;
+  }
 }
 
 async function deleteCatalogueFrs(id) {
-  await catalogueFrsRef().doc(id).delete();
+  try {
+    Logger.info('Soft delete fournisseur catalogue', { id });
+
+    await catalogueFrsRef().doc(id).update({
+      deleted: true,
+      deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      deletedBy: currentUser?.uid || 'unknown'
+    });
+
+    Logger.info('Fournisseur supprimé (soft delete)', { id });
+    logAction('Suppression fournisseur', id, currentUser?.name || '');
+
+  } catch (e) {
+    Logger.error('Erreur deleteCatalogueFrs', { id, error: e.message });
+    throw e;
+  }
 }
 
 // ── Journal de bord ──────────────────────────────────────────────────

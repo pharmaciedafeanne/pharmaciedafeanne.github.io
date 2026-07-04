@@ -1,0 +1,672 @@
+================================================================================
+AUDIT DÉTAILLÉ — CHAMPS FORMULAIRES PAR FORMULAIRE
+================================================================================
+
+Date: 2026-07-04
+Codebase: Pharmacie Dafeanne v20260713
+
+================================================================================
+FORMULAIRE 1: MODAL EDIT BON (modal-edit-bon)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="eb-label" → <span> (affichage du bon)
+  - id="eb-row-df-simple" → <div class="form-row"> (ligne DAFEANNE montant simple)
+  - id="eb-row-dp-simple" → <div class="form-row"> (ligne DÉPÔT montant simple)
+  - id="eb-df-simple" → <input type="number"> (DAFEANNE montant simple)
+  - id="eb-dp-simple" → <input type="number"> (DÉPÔT montant simple)
+  - id="eb-row-df-inam" → <div class="form-row"> (ligne DAFEANNE INAM)
+  - id="eb-row-df-amu" → <div class="form-row"> (ligne DAFEANNE AMU)
+  - id="eb-row-dp-inam" → <div class="form-row"> (ligne DÉPÔT INAM)
+  - id="eb-row-dp-amu" → <div class="form-row"> (ligne DÉPÔT AMU)
+  - id="eb-df-inam" → <input type="number">
+  - id="eb-df-amu" → <input type="number">
+  - id="eb-dp-inam" → <input type="number">
+  - id="eb-dp-amu" → <input type="number">
+  - id="eb-remarque" → <textarea rows="2">
+  - id="btn-eb-save" → <button> (sauvegarde)
+
+FONCTIONS JAVASCRIPT:
+  openEditBon(periodKey, lotNum, bonId)
+    Fichier: app.js, ligne 698
+    Type: Chargement
+    Actions:
+      - Récupère period data depuis Firestore
+      - Charge le bon à partir de lot.bons[]
+      - Pré-remplit tous les champs selon le format (simple ou complet)
+      - Définit le handler onclick pour btn-eb-save
+
+  Sauvegarde inline (dans openEditBon):
+    Fichier: app.js, ligne 744
+    Type: Sauvegarde
+    Actions:
+      - Lit eb-df-simple OU eb-df-inam/amu selon le format
+      - Lit eb-dp-simple OU eb-dp-inam/amu selon le format
+      - Lit eb-remarque
+      - Met à jour bon.dafeanne et bon.depot
+      - Appelle savePeriod() pour persister
+
+CHAMPS → CAPTURE:
+  eb-df-simple    → ligne 746: parseFloat(...).value || 0
+  eb-dp-simple    → ligne 747: parseFloat(...).value || 0
+  eb-df-inam      → ligne 749: parseFloat(...).value || 0
+  eb-df-amu       → ligne 749: parseFloat(...).value || 0
+  eb-dp-inam      → ligne 750: parseFloat(...).value || 0
+  eb-dp-amu       → ligne 750: parseFloat(...).value || 0
+  eb-remarque     → ligne 752: value.trim()
+
+CHAMPS → CHARGEMENT:
+  eb-df-simple    → ligne 727: bon.dafeanne[e]
+  eb-dp-simple    → ligne 728: bon.depot[e]
+  eb-df-inam      → ligne 737: bon.dafeanne.inam
+  eb-df-amu       → ligne 738: bon.dafeanne.amu
+  eb-dp-inam      → ligne 739: bon.depot.inam
+  eb-dp-amu       → ligne 740: bon.depot.amu
+  eb-remarque     → ligne 742: bon.remarque
+
+STATUT: ✓ COMPLET (tous les champs capturés et chargés correctement)
+
+================================================================================
+FORMULAIRE 2: MODAL UTILISATEUR (modal-user)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="user-uid" → <input type="hidden">
+  - id="user-name" → <input type="text"> (nom complet)
+  - id="user-email" → <input type="hidden"> (email technique)
+  - id="user-password" → <input type="password">
+  - id="user-password-row" → <div class="form-row">
+  - id="user-role" → <select> (Opérateur/Assistant/Titulaire)
+  - id="perm-cloturer" → <input type="checkbox"> (permission Clôturer)
+  - id="perm-rouvrir" → <input type="checkbox"> (permission Rouvrir)
+  - id="perm-inam" → <input type="checkbox"> (permission INAM/AMU)
+  - id="perm-caisse" → <input type="checkbox"> (permission Caisse)
+  - id="perm-recharge" → <input type="checkbox"> (permission Recharge)
+  - id="perm-fournisseurs" → <input type="checkbox"> (permission Fournisseurs)
+  - id="perm-import" → <input type="checkbox"> (permission Import)
+  - id="btn-save-user" → <button> (sauvegarde)
+
+FONCTIONS JAVASCRIPT:
+  openEditUser(uid)
+    Fichier: app.js, ligne 1942
+    Type: Chargement
+    Actions:
+      - Récupère user data depuis getAllUsers()
+      - Pré-remplit tous les champs
+      - Masque/affiche les contrôles selon le mode (new/edit)
+
+  doSaveUser()
+    Fichier: app.js, ligne 1967
+    Type: Sauvegarde
+    Actions:
+      - Récupère tous les champs
+      - Si uid: appel updateAccount()
+      - Si pas uid: création avec createAccount() + updateUserProfile()
+
+  openAddUser() (implicit, peu de code visible)
+    Type: Réinitialisation
+    Actions:
+      - Réinitialise les champs pour nouvelle création
+
+CHAMPS → CAPTURE (doSaveUser):
+  user-uid        → ligne 1968: value
+  user-name       → ligne 1969: value.trim()
+  user-email      → ligne 1970: value.trim()
+  user-role       → ligne 1971: value
+  user-password   → ligne 1972: value
+  perm-cloturer   → ligne 1980: el.checked (loop)
+  perm-rouvrir    → ligne 1980: el.checked (loop)
+  perm-inam       → ligne 1980: el.checked (loop)
+  perm-caisse     → ligne 1980: el.checked (loop)
+  perm-recharge   → ligne 1980: el.checked (loop)
+  perm-fournisseurs → ligne 1980: el.checked (loop)
+  perm-import     → ligne 1980: el.checked (loop)
+
+CHAMPS → CHARGEMENT (openEditUser):
+  user-uid        → ligne 1949: value = uid
+  user-name       → ligne 1950: value = u.name
+  user-email      → ligne 1951: value = u.email
+  user-password   → ligne 1955: value = '' (intentionnellement vide)
+  user-role       → ligne 1952-1954: value = 'operateur' (fixé)
+  user-password-row → ligne 1957: display = 'block'
+  perm-*          → ligne 1960-1961: checked = !!perms[p] (loop)
+
+PARTICULARITÉS:
+  - Le email est un hidden field (technique uniquement)
+  - Le rôle est fixé à 'operateur' lors de l'édition (roles pas changeables)
+  - Le password est toujours affiché mais vide (placeholder: "Laisser vide = inchangé")
+
+STATUT: ✓ COMPLET (tous les champs capturés et chargés correctement)
+
+================================================================================
+FORMULAIRE 3: MODAL ENTRÉE INAM/AMU (modal-inam-entry)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="inam-entry-id" → <input type="hidden">
+  - id="inam-entry-date" → <input type="date" required>
+  - id="inam-entry-entite" → <select> (INAM/AMU)
+  - id="inam-entry-qnum" → <select> (Q1/Q2)
+  - id="inam-entry-mois" → <select> (JANVIER-DÉCEMBRE)
+  - id="inam-entry-annee" → <select> (années)
+  - id="inam-entry-bis" → <input type="checkbox"> (BIS flag)
+  - id="inam-quinzaine-preview" → <strong> (aperçu quinzaine, affichage seul)
+  - id="inam-entry-facture" → <input type="number" required>
+  - id="inam-entry-paye" → <input type="number">
+  - id="inam-entry-statut" → <select> (non payé/en cours/payé)
+  - id="inam-entry-virement" → <input type="date">
+
+FONCTIONS JAVASCRIPT:
+  openEditInamEntry(id)
+    Fichier: app.js, ligne 2742
+    Type: Chargement
+    Actions:
+      - Récupère entry data depuis getAllSuiviInamAmu()
+      - Pré-remplit les champs date, entite, montants, statut
+      - Appel initInamQuinzaineSelectors(r.quinzaine) pour les selects
+
+  saveInamEntry()
+    Fichier: app.js, ligne 2760
+    Type: Sauvegarde
+    Actions:
+      - Récupère tous les champs
+      - Construit la quinzaine via buildInamQuinzaine()
+      - Si id: appel updateSuiviInamAmu()
+      - Si pas id: appel saveSuiviInamAmu()
+
+CHAMPS → CAPTURE (saveInamEntry):
+  inam-entry-id       → ligne 2761: value
+  inam-entry-date     → ligne 2762: value
+  inam-entry-entite   → ligne 2763: value
+  inam-entry-qnum     → ligne 2764: via buildInamQuinzaine()
+  inam-entry-mois     → ligne 2764: via buildInamQuinzaine()
+  inam-entry-annee    → ligne 2764: via buildInamQuinzaine()
+  inam-entry-bis      → ligne 2764: via buildInamQuinzaine()
+  inam-entry-facture  → ligne 2765: parseFloat(...) || 0
+  inam-entry-paye     → ligne 2766: parseFloat(...) || 0
+  inam-entry-statut   → ligne 2767: value
+  inam-entry-virement → ligne 2768: value
+
+CHAMPS → CHARGEMENT (openEditInamEntry):
+  inam-entry-id       → ligne 2747: value = id
+  inam-entry-date     → ligne 2748: value = r.date
+  inam-entry-entite   → ligne 2749: value = r.entite
+  inam-entry-facture  → ligne 2750: value = r.montantFacture
+  inam-entry-paye     → ligne 2751: value = r.montantPaye
+  inam-entry-statut   → ligne 2752: value = r.statut
+  inam-entry-virement → ligne 2753: value = r.dateVirement
+  inam-entry-qnum,etc → ligne 2755: initInamQuinzaineSelectors(r.quinzaine)
+
+PARTICULARITÉS:
+  - La quinzaine est composée de 4 champs (Q1/Q2, Mois, Année, BIS)
+  - buildInamQuinzaine() est une fonction d'agrégation qui combine ces 4 champs
+  - initInamQuinzaineSelectors() est une fonction qui décompose une quinzaine en 4
+
+STATUT: ✓ COMPLET (tous les champs capturés et chargés via fonctions intermédiaires)
+
+================================================================================
+FORMULAIRE 4: MODAL RECHARGE CAISSE (modal-recharge)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="recharge-id" → <input type="hidden">
+  - id="recharge-date" → <input type="date" required>
+  - id="recharge-montant" → <input type="number" min="0" required>
+  - id="recharge-type" → <select> (espece/mobilemoney)
+  - id="recharge-ref-row" → <div class="form-row"> (masquée par défaut)
+  - id="recharge-ref" → <input type="text"> (référence MM)
+  - id="recharge-obs" → <textarea rows="2"> (observations)
+
+FONCTIONS JAVASCRIPT:
+  openRecharge()
+    Fichier: app.js, ligne 2856
+    Type: Initialisation (NEW)
+    Actions:
+      - Réinitialise tous les champs
+      - Pré-remplit date avec today
+      - Masque recharge-ref-row
+
+  openEditRecharge(id)
+    Fichier: app.js, ligne 2867
+    Type: Chargement (EDIT)
+    Actions:
+      - Récupère op data depuis getAllCaisseOps()
+      - Pré-remplit tous les champs
+      - Affiche/masque recharge-ref-row selon typeRecharge
+
+  saveRecharge()
+    Fichier: app.js, ligne 2881
+    Type: Sauvegarde
+    Actions:
+      - Récupère tous les champs
+      - Valide date, montant, typeRecharge
+      - Si id: appel saveCaisseOp({...data, id})
+      - Si pas id: appel saveCaisseOp(data)
+
+  onRechargeTypeChange()
+    Fichier: app.js, ligne 2850
+    Type: UI handler
+    Actions:
+      - Affiche/masque recharge-ref-row selon type
+
+CHAMPS → CAPTURE (saveRecharge):
+  recharge-id         → ligne 2882: value
+  recharge-date       → ligne 2883: value
+  recharge-montant    → ligne 2884: parseFloat(...) || 0
+  recharge-type       → ligne 2885: value
+  recharge-ref        → ligne 2886: value.trim()
+  recharge-obs        → ligne 2887: value.trim()
+
+CHAMPS → CHARGEMENT (openEditRecharge):
+  recharge-id         → ligne 2871: value = id
+  recharge-date       → ligne 2872: value = op.date
+  recharge-montant    → ligne 2873: value = op.montant
+  recharge-type       → ligne 2874: value = op.typeRecharge
+  recharge-ref        → ligne 2875: value = op.refTransaction
+  recharge-obs        → ligne 2876: value = op.note
+  recharge-ref-row    → ligne 2877: toggle display
+
+PARTICULARITÉS:
+  - Le champ ref n'est visible que si type == 'mobilemoney'
+  - onRechargeTypeChange() gère le toggle du ref-row
+
+STATUT: ✓ COMPLET (tous les champs capturés et chargés, conditional visibility OK)
+
+================================================================================
+FORMULAIRE 5: MODAL DÉPENSE CAISSE (modal-depense)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="depense-id" → <input type="hidden">
+  - id="depense-date" → <input type="date" required>
+  - id="depense-montant" → <input type="number" min="0" required>
+  - id="depense-fournisseur" → <input type="text"> (optionnel)
+  - id="depense-designation" → <input type="text" required>
+  - id="depense-obs" → <textarea rows="2">
+
+FONCTIONS JAVASCRIPT:
+  openDepense()
+    Fichier: app.js, ligne 2902
+    Type: Initialisation (NEW ONLY)
+    Actions:
+      - Réinitialise tous les champs
+      - Pré-remplit date avec today
+
+  saveDepense()
+    Fichier: app.js, ligne 2912
+    Type: Sauvegarde
+    Actions:
+      - Récupère tous les champs
+      - IGNORE le champ depense-id (BUG!)
+      - Crée toujours une nouvelle dépense
+      - Jamais d'UPDATE
+
+  ❌ MANQUANTE: openEditDepense(id)
+    Type: Chargement (EDIT) — N'EXISTE PAS
+    Comportement attendu:
+      - Récupérer depense data depuis getAllCaisseOps()
+      - Pré-remplir tous les champs
+
+CHAMPS → CAPTURE (saveDepense):
+  depense-id          → ligne 2913: value (LU MAIS NON UTILISÉ — BUG!)
+  depense-date        → ligne 2914: value
+  depense-montant     → ligne 2915: parseFloat(...) || 0
+  depense-fournisseur → ligne 2916: value.trim()
+  depense-designation → ligne 2917: value.trim()
+  depense-obs         → ligne 2918: value.trim()
+
+CHAMPS → CHARGEMENT:
+  ❌ AUCUN (pas de openEditDepense)
+
+PARTICULARITÉS:
+  - saveCaisseOp() est appelée sans id, donc toujours création
+  - Le bouton éditer n'existe pas dans le tableau (renderCaisse())
+
+STATUT: ❌ BUG CRITIQUE — Pas de mode édition
+  - Le champ depense-id existe mais n'est jamais utilisé
+  - Aucune fonction openEditDepense()
+  - Les dépenses ne peuvent pas être modifiées après création
+
+FIX REQUIS:
+  1. Créer openEditDepense(id)
+  2. Modifier saveDepense() pour vérifier si id existe et faire UPDATE
+  3. Ajouter bouton éditer dans le tableau de caisse
+
+================================================================================
+FORMULAIRE 6: MODAL CATALOGUE FOURNISSEUR (modal-cat-frs)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="cat-frs-id" → <input type="hidden">
+  - id="cat-frs-nom" → <input type="text" required>
+  - id="cat-frs-tel" → <input type="text">
+  - id="cat-frs-adresse" → <input type="text">
+
+FONCTIONS JAVASCRIPT:
+  openAddCatFrs()
+    Fichier: app.js, ligne 2039
+    Type: Initialisation (NEW)
+    Actions:
+      - Réinitialise tous les champs
+      - Définit titre "Nouveau Fournisseur"
+
+  openEditCatFrs(id, nom, tel, adresse)
+    Fichier: app.js, ligne 2048
+    Type: Chargement (EDIT)
+    Actions:
+      - Pré-remplit via paramètres (pas de lookup Firestore)
+      - Définit titre "Modifier Fournisseur"
+
+  saveCatFrs()
+    Fichier: app.js, ligne 2057
+    Type: Sauvegarde
+    Actions:
+      - Récupère tous les champs
+      - Valide nom (obligatoire)
+      - Si id: appel saveCatalogueFrs({...id})
+      - Si pas id: appel saveCatalogueFrs({...})
+
+CHAMPS → CAPTURE (saveCatFrs):
+  cat-frs-id      → ligne 2058: value
+  cat-frs-nom     → ligne 2059: value.trim()
+  cat-frs-tel     → ligne 2060: value.trim()
+  cat-frs-adresse → ligne 2061: value.trim()
+
+CHAMPS → CHARGEMENT (openEditCatFrs):
+  cat-frs-id      → ligne 2049: value = id (paramètre)
+  cat-frs-nom     → ligne 2050: value = nom (paramètre)
+  cat-frs-tel     → ligne 2051: value = tel (paramètre)
+  cat-frs-adresse → ligne 2052: value = adresse (paramètre)
+
+PARTICULARITÉS:
+  - openEditCatFrs() reçoit les données en paramètre au lieu de les chercher
+  - C'est une approche légère (pas de lookup Firestore)
+  - Les données proviennent du tableau HTML via renderCatalogueFrs()
+
+STATUT: ✓ COMPLET (tous les champs capturés et chargés)
+
+================================================================================
+FORMULAIRE 7: FORMULAIRE NOUVELLE QUINZAINE (form-nouvelle)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="form-nouvelle" → <form id="form-nouvelle">
+  - id="new-year" → <select> (années)
+  - id="new-month" → <select> (mois)
+  - id="new-quinzaine" → <select> (Q1/Q2)
+  - id="new-bis-row" → <div> (ligne BIS)
+  - id="new-bis" → <input type="checkbox"> (checkbox BIS)
+  - id="lots-builder" → <div> (dynamique, gestion AppState)
+
+FONCTIONS JAVASCRIPT:
+  renderNouvelle()
+    Fichier: app.js, ligne 794
+    Type: Rendu
+    Actions:
+      - Réinitialise form-nouvelle
+      - Restaure brouillon si available
+      - Gère AppState pour lots et entité
+      - Affiche/masque bandeau BIS
+
+  saveNouvelle()
+    Fichier: app.js, ligne 1716
+    Type: Sauvegarde
+    Actions:
+      - Récupère period fields (year, month, quinzaine)
+      - Récupère lots depuis AppState
+      - Vérifie bisMode dans AppState
+      - Appel saveNouvelleBis() ou saveNouvelleNormal()
+
+  saveNouvelleBis(bisMode, year, month, quinzaine, lots)
+    Fichier: app.js, ligne 1769
+    Type: Sauvegarde (mode BIS)
+
+  saveNouvelleNormal(year, month, quinzaine, lots)
+    Fichier: app.js, ligne 1796
+    Type: Sauvegarde (mode NORMAL)
+
+CHAMPS → CAPTURE (saveNouvelle):
+  new-year        → ligne 1719: parseInt(...).value
+  new-month       → ligne 1720: parseInt(...).value
+  new-quinzaine   → ligne 1721: value
+  new-bis         → ❌ JAMAIS LU (BUG!)
+  lots            → ligne 1734: AppState.get('saisie.lots')
+
+CHAMPS → CHARGEMENT (renderNouvelle):
+  form-nouvelle   → ligne 797: form.reset() (réinitialise tous)
+  lots            → ligne 799: AppState.set('saisie.lots', [])
+  entite          → ligne 800: AppState.set('saisie.entite', null)
+  bisMode         → ligne 802: AppState.get('bisMode')
+
+PARTICULARITÉS:
+  - Les lots ne sont pas dans le formulaire HTML, ils sont gérés par AppState
+  - Le checkbox "new-bis" existe en HTML mais n'est jamais utilisé
+  - La mode BIS provient de AppState, pas du checkbox
+  - renderNouvelle() effectue un reset complet du formulaire
+
+STATUT: ⚠️ BUG — Checkbox BIS en HTML mais non utilisé
+  - Le checkbox #new-bis existe ligne 394
+  - Mais saveNouvelle() ne le lit jamais (ligne 1716)
+  - La logique BIS provient de AppState, pas du formulaire
+  - C'est une incohérence UX
+
+FIX REQUIS:
+  Option A: Supprimer le checkbox du HTML (recommandé)
+  Option B: Implémenter la lecture du checkbox (complexe, nécessite refactor)
+
+================================================================================
+FORMULAIRE 8: MODAL FACTURE FOURNISSEUR (modal-facture)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="facture-id" → <input type="hidden">
+  - id="facture-date" → <input type="date" required>
+  - id="facture-echeance" → <input type="date" required>
+  - id="facture-fournisseur" → <input type="text" required>
+  - id="facture-montant" → <input type="number" required>
+  - id="facture-designation" → <input type="text">
+  - id="facture-mode" → <select>
+  - id="facture-ref" → <input type="text">
+  - id="facture-statut" → <select>
+  - id="facture-date-paye" → <input type="date">
+  - id="facture-obs" → <textarea rows="2">
+  - id="facture-prospective" → <input type="checkbox">
+  - id="facture-alerte-row" → <div> (conditionnel)
+  - id="facture-alerte-jours" → <input type="number">
+
+FONCTIONS JAVASCRIPT:
+  openNewFacture()
+    Fichier: app.js, ligne 3168
+    Type: Initialisation (NEW)
+    Actions:
+      - Réinitialise tous les champs
+      - Pré-remplit montant et statut par défaut
+      - Masque facture-alerte-row
+
+  openEditFacture(id)
+    Fichier: app.js, ligne 3197
+    Type: Chargement (EDIT)
+    Actions:
+      - Récupère facture data depuis getAllFactures()
+      - Pré-remplit tous les champs
+      - Gère affichage/masquage de facture-alerte-row
+
+  saveFactureForm()
+    Fichier: app.js, ligne 3223
+    Type: Sauvegarde
+    Actions:
+      - Récupère tous les champs
+      - Valide via validateFacture()
+      - Si id: UPDATE
+      - Si pas id: CREATE
+
+CHAMPS → CAPTURE (saveFactureForm):
+  facture-id          → ligne 3226: value
+  facture-fournisseur → ligne 3227: value.trim()
+  facture-date        → ligne 3228: value
+  facture-echeance    → ligne 3229: value
+  facture-montant     → ligne 3230: parseFloat(...) || 0
+  facture-designation → ligne 3231: value.trim()
+  facture-statut      → ligne 3232: value
+  facture-date-paye   → ligne 3233: value
+  facture-obs         → ligne 3234: value.trim()
+  facture-mode        → ligne 3235: value
+  facture-ref         → ligne 3236: value.trim()
+  facture-prospective → ligne 3237: checked
+  facture-alerte-jours → ligne 3238: parseInt(...) || 7
+
+CHAMPS → CHARGEMENT (openEditFacture):
+  facture-id          → ligne 3201: value = f.id
+  facture-fournisseur → ligne 3202: value = f.fournisseur
+  facture-date        → ligne 3203: value = f.dateFacture
+  facture-echeance    → ligne 3204: value = f.echeance
+  facture-montant     → ligne 3205: value = f.montant
+  facture-designation → ligne 3206: value = f.designation
+  facture-statut      → ligne 3207: value = f.statut
+  facture-date-paye   → ligne 3208: value = f.datePaye
+  facture-obs         → ligne 3209: value = f.note
+  facture-mode        → ligne 3210: value = f.mode
+  facture-ref         → ligne 3211: value = f.ref
+  facture-prospective → ligne 3213: checked = !!f.prospective
+  facture-alerte-jours → ligne 3217: value = f.alerteJours || 7
+  facture-alerte-row  → ligne 3215: display = f.prospective ? '' : 'none'
+
+PARTICULARITÉS:
+  - Le champ facture-alerte-jours n'apparaît que si prospective==true
+  - onProspectiveChange() gère le toggle de facture-alerte-row
+  - L'alerte n'est sauvegardée que si prospective==true
+
+STATUT: ✓ COMPLET (tous les champs capturés et chargés, conditional visibility OK)
+
+================================================================================
+FORMULAIRE 9: MODAL PHARMACIE ADMIN (adm-modal-pharma)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="pharma-form" → <form id="pharma-form">
+  - id="pharma-form-id" → <input type="hidden">
+  - id="pharma-code" → <input type="text" required>
+  - id="pharma-nom" → <input type="text">
+  - id="pharma-telephone" → <input type="text">
+
+FONCTIONS JAVASCRIPT:
+  openNewPharmacie()
+    Fichier: app.js, ligne 2481
+    Type: Initialisation (NEW)
+    Actions:
+      - Réinitialise form via form.reset()
+      - Vide pharma-form-id
+      - Définit titre modal
+
+  openEditPharmacie(id)
+    Fichier: app.js, ligne 2488
+    Type: Chargement (EDIT)
+    Actions:
+      - Récupère pharmacies list via getAllPharmacies()
+      - Trouve la pharmacie par id
+      - Pré-remplit tous les champs
+      - Définit titre modal
+
+  submit event listener (pharma-form)
+    Fichier: app.js, ligne 2501
+    Type: Sauvegarde
+    Actions:
+      - Récupère tous les champs
+      - Si id: appel updatePharmacie()
+      - Si pas id: appel createPharmacie()
+
+CHAMPS → CAPTURE (submit handler):
+  pharma-form-id      → ligne 2503: value
+  pharma-code         → ligne 2504: value.trim().toUpperCase()
+  pharma-nom          → ligne 2505: value.trim()
+  pharma-telephone    → ligne 2506: value.trim()
+
+CHAMPS → CHARGEMENT (openEditPharmacie):
+  pharma-form-id      → ligne 2492: value = id
+  pharma-code         → ligne 2493: value = ph.code
+  pharma-nom          → ligne 2494: value = ph.nom
+  pharma-telephone    → ligne 2495: value = ph.telephone
+
+PARTICULARITÉS:
+  - La sauvegarde est un event listener sur submit, pas une fonction nommée
+  - Le code est toujours en majuscule
+  - En création, le code est obligatoire; en édition, il ne peut pas être changé
+
+STATUT: ✓ COMPLET (tous les champs capturés et chargés)
+
+================================================================================
+FORMULAIRE 10: MODAL UTILISATEUR ADMIN (adm-modal-user)
+================================================================================
+
+HTML ELEMENTS (index.html):
+  - id="adm-user-uid" → <input type="hidden">
+  - id="adm-user-name" → <input type="text" required>
+  - id="adm-user-email" → <input type="email" required>
+  - id="adm-user-password" → <input type="password">
+  - id="adm-user-password-row" → <div> (gestion visibilité)
+  - id="adm-user-role" → <select> required
+  - id="adm-user-pharmacie" → <select> required
+  - id="adm-user-perms-row" → <div> (visible si operateur)
+  - id="adm-perm-cloturer" → <input type="checkbox">
+  - id="adm-perm-rouvrir" → <input type="checkbox">
+  - id="adm-perm-inam" → <input type="checkbox">
+  - id="adm-perm-caisse" → <input type="checkbox">
+  - id="adm-perm-recharge" → <input type="checkbox">
+  - id="adm-perm-fournisseurs" → <input type="checkbox">
+  - id="adm-perm-import" → <input type="checkbox">
+
+FONCTIONS JAVASCRIPT:
+  ❌ MANQUANTE: openEditAdminUser(uid)
+    Type: Chargement (EDIT) — N'EXISTE PAS
+    Comportement attendu:
+      - Récupérer user data depuis getAllUsers()
+      - Pré-remplir tous les champs
+      - Cocher les permissions existantes
+
+  doSaveAdminUser()
+    Fichier: app.js, ligne 2326
+    Type: Sauvegarde
+    Actions:
+      - Récupère tous les champs
+      - Si uid: appel updateAccount()
+      - Si pas uid: appel createAccount()
+
+  openAdminAddUser() (implicit, peu de code)
+    Type: Initialisation (NEW)
+
+CHAMPS → CAPTURE (doSaveAdminUser):
+  adm-user-uid        → ligne 2327: value
+  adm-user-name       → ligne 2328: value.trim()
+  adm-user-email      → ligne 2329: value.trim()
+  adm-user-password   → ligne 2330: value
+  adm-user-role       → ligne 2331: value
+  adm-user-pharmacie  → ligne 2332: value
+  adm-perm-cloturer   → ligne 2340: el.checked (loop si operateur)
+  adm-perm-rouvrir    → ligne 2340: el.checked (loop si operateur)
+  adm-perm-inam       → ligne 2340: el.checked (loop si operateur)
+  adm-perm-caisse     → ligne 2340: el.checked (loop si operateur)
+  adm-perm-recharge   → ligne 2340: el.checked (loop si operateur)
+  adm-perm-fournisseurs → ligne 2340: el.checked (loop si operateur)
+  adm-perm-import     → ligne 2340: el.checked (loop si operateur)
+
+CHAMPS → CHARGEMENT:
+  ❌ AUCUN (pas de openEditAdminUser)
+
+PARTICULARITÉS:
+  - Les permissions ne sont collectées que si role == 'operateur'
+  - adm-user-perms-row n'est visible que si role == 'operateur'
+  - Le password est obligatoire en création, optionnel en édition
+
+STATUT: ❌ BUG CRITIQUE — Pas de fonction openEditAdminUser()
+  - Impossible de pré-remplir les champs lors de l'édition
+  - Les utilisateurs admin ne peuvent pas être modifiés correctement
+  - Les permissions ne peuvent pas être changées
+
+FIX REQUIS:
+  1. Créer openEditAdminUser(uid)
+  2. Implémenter la logique de chargement et pré-remplissage
+  3. Gérer l'affichage/masquage de adm-user-perms-row
+
+================================================================================
+FIN DE L'AUDIT DÉTAILLÉ
+================================================================================

@@ -2961,8 +2961,8 @@ async function saveInamEntry() {
   const date           = document.getElementById('inam-entry-date').value;
   const entite         = document.getElementById('inam-entry-entite').value;
   const quinzaine      = buildInamQuinzaine();
-  const montantFacture = parseFloat(document.getElementById('inam-entry-facture').value)||0;
-  const montantPaye    = parseFloat(document.getElementById('inam-entry-paye').value)||0;
+  const montantFacture = Math.max(0, parseFloat(document.getElementById('inam-entry-facture').value)||0);
+  const montantPaye    = Math.max(0, parseFloat(document.getElementById('inam-entry-paye').value)||0);
   const statut         = document.getElementById('inam-entry-statut').value;
   const dateVirement   = document.getElementById('inam-entry-virement').value;
   if (!date || !entite) return toast('Veuillez remplir la Date et l\'Entité','error');
@@ -3080,7 +3080,7 @@ async function openEditRecharge(id) {
 async function saveRecharge() {
   const id          = document.getElementById('recharge-id').value;
   const date        = document.getElementById('recharge-date').value;
-  const montant     = parseFloat(document.getElementById('recharge-montant').value)||0;
+  const montant     = Math.max(0, parseFloat(document.getElementById('recharge-montant').value)||0);
   const typeRecharge= document.getElementById('recharge-type').value;
   const refTransaction = document.getElementById('recharge-ref').value.trim();
   const note        = document.getElementById('recharge-obs').value.trim();
@@ -3124,7 +3124,7 @@ async function openEditDepense(id) {
 async function saveDepense() {
   const id          = document.getElementById('depense-id').value;
   const date        = document.getElementById('depense-date').value;
-  const montant     = parseFloat(document.getElementById('depense-montant').value)||0;
+  const montant     = Math.max(0, parseFloat(document.getElementById('depense-montant').value)||0);
   const fournisseur = document.getElementById('depense-fournisseur').value.trim();
   const libelle     = document.getElementById('depense-designation').value.trim();
   const note        = document.getElementById('depense-obs').value.trim();
@@ -3505,7 +3505,7 @@ async function openPayFacture(id) {
   if (!f) return;
   const montant = prompt(`Montant payé pour ${f.fournisseur} (total: ${fmtA(f.montant)}) :`, '0');
   if (montant === null) return;
-  const val = parseFloat(montant)||0;
+  const val = Math.max(0, parseFloat(montant)||0);
   const nouvPaye = (f.montantPaye||0) + val;
   const statut   = nouvPaye >= (f.montant||0) ? 'payé' : 'en cours';
   try {

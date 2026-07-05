@@ -2720,22 +2720,108 @@ async function renderUsers() {
 
 async function doCloturerQuinzaine(key) {
   if (!confirm('Clôturer cette quinzaine ? La saisie sera verrouillée.')) return;
+
   try {
-    await getQuinzaineDocRef(key).update({ cloturee: true, clotureeAt: firebase.firestore.FieldValue.serverTimestamp() });
+    const db = getDB();
+    const ref = getQuinzaineDocRef(key);
+
+    // TRANSACTION ATOMIQUE : read → check → write
+    const result = await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(ref);
+
+      if (!snap.exists) {
+        throw new Error('Quinzaine introuvable');
+      }
+
+      const period = snap.data();
+
+      // Vérification : ne pas clôturer deux fois
+      if (period.cloturee) {
+        throw new Error('Cette quinzaine est déjà clôturée');
+      }
+
+      // Clôturer atomiquement
+      const updates = {
+        cloturee: true,
+        clotureeAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      transaction.update(ref, updates);
+
+      return period;
+    });
+
+    Logger.info('Quinzaine clôturée (transaction)', {
+      key,
+      period: periodLbl(result),
+      user: currentUser?.name || ''
+    });
+
     toast('Quinzaine clôturée ✓', 'success');
-    logAction('Clôture quinzaine', key, currentUser?.name||'');
+    logAction('Clôture quinzaine', periodLbl(result), currentUser?.name || '');
     renderDetail(key);
-  } catch(e) { toast('Erreur: '+e.message, 'error'); }
+
+  } catch (e) {
+    Logger.error('Erreur doCloturerQuinzaine (transaction)', {
+      key,
+      error: e.message
+    });
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 async function doRouvrirQuinzaine(key) {
   if (!confirm('Rouvrir cette quinzaine ?')) return;
+
   try {
-    await getQuinzaineDocRef(key).update({ cloturee: false });
+    const db = getDB();
+    const ref = getQuinzaineDocRef(key);
+
+    // TRANSACTION ATOMIQUE : read → check → write
+    const result = await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(ref);
+
+      if (!snap.exists) {
+        throw new Error('Quinzaine introuvable');
+      }
+
+      const period = snap.data();
+
+      // Vérification : ne rouvrir que si clôturée
+      if (!period.cloturee) {
+        throw new Error('Cette quinzaine n\'est pas clôturée');
+      }
+
+      // Rouvrir atomiquement
+      const updates = {
+        cloturee: false,
+        clotureeAt: firebase.firestore.FieldValue.delete(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      transaction.update(ref, updates);
+
+      return period;
+    });
+
+    Logger.info('Quinzaine rouverte (transaction)', {
+      key,
+      period: periodLbl(result),
+      user: currentUser?.name || ''
+    });
+
     toast('Quinzaine rouverte ✓', 'success');
-    logAction('Réouverture quinzaine', key, currentUser?.name||'');
+    logAction('Réouverture quinzaine', periodLbl(result), currentUser?.name || '');
     renderDetail(key);
-  } catch(e) { toast('Erreur: '+e.message, 'error'); }
+
+  } catch (e) {
+    Logger.error('Erreur doRouvrirQuinzaine (transaction)', {
+      key,
+      error: e.message
+    });
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════

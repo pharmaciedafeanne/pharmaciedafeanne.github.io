@@ -366,32 +366,58 @@ async function renderQuinzaines() {
 //  DÉTAIL QUINZAINE
 // ══════════════════════════════════════════════════════════════
 
-let _detailEditingKey = null; // clé de la quinzaine en édition depuis la vue detail
-
 async function saveDetailEdit(key) {
-  if (!_lots.length) { toast('Ajoutez au moins un lot','error'); return; }
   try {
+    // Lire depuis AppState (source de vérité)
+    const lots = AppState.get('saisie.lots');
+    if (!lots || !lots.length) {
+      toast('Ajoutez au moins un lot', 'error');
+      return;
+    }
+
+    const entite = AppState.get('saisie.entite');
+    if (!entite) {
+      toast('Entité manquante', 'error');
+      return;
+    }
+
+    // Charger la période actuelle
     const snap = await getQuinzaineDocRef(key).get();
-    if (!snap.exists) { toast('Quinzaine introuvable','error'); return; }
+    if (!snap.exists) {
+      toast('Quinzaine introuvable', 'error');
+      return;
+    }
+
     const period = snap.data();
+
+    // Sauvegarder avec les données d'AppState
     await savePeriod({
       year: period.year,
       month: period.month,
       quinzaine: period.quinzaine,
-      entite: period.entite,
-      lots: _lots,
+      entite: entite,
+      lots: lots,
       brouillon: false,
       _key: key
     });
+
     toast(`Quinzaine enregistrée ✓`, 'success');
-    logAction(`Modification quinzaine`, `${period.quinzaine} ${MOIS_APP[period.month]} ${period.year}`, currentUser?.name||'');
-    _detailEditingKey = null;
-    _lots = [];
-    _saisieEntite = null;
+    logAction(`Modification quinzaine`, `${period.quinzaine} ${MOIS_APP[period.month]} ${period.year}`, currentUser?.name || '');
+
+    // Nettoyer AppState et timers
+    AppState.set('saisie.entite', null);
+    AppState.set('saisie.lots', []);
+    AppState.set('saisie.editingKey', null);
     clearTimeout(_autoSaveTimer);
     clearTimeout(_autoSaveFirestoreTimer);
+
+    Logger.info('Édition quinzaine sauvegardée', { key, entite, nbLots: lots.length });
     navigate('quinzaines');
-  } catch(e) { toast('Erreur sauvegarde: '+e.message,'error'); }
+
+  } catch (e) {
+    Logger.error('Erreur saveDetailEdit', { key, error: e.message, stack: e.stack });
+    toast('Erreur sauvegarde: ' + e.message, 'error');
+  }
 }
 
 async function renderDetail(key) {
@@ -429,86 +455,29 @@ async function renderDetail(key) {
     clotureBanner.classList.remove('hidden');
   }
 
-  // Si ouverte : afficher en mode éditable
+  // MODE ÉDITION : Initialiser AppState et afficher le builder
   if (!closed) {
-    _detailEditingKey = key;
-    _saisieEntite = period.entite || 'INAM';
-    _lots = (period.lots || []).map((lot, i) => ({ ...lot, numero: i + 1 }));
-    // Désactiver auto-save brouillon (pas de sauvegarde auto dans la vue detail)
-    clearTimeout(_autoSaveTimer);
-    clearTimeout(_autoSaveFirestoreTimer);
+    try {
+      // Injecter les données de Firestore dans AppState (source de vérité)
+      AppState.set('saisie.entite', period.entite || 'INAM');
+      AppState.set('saisie.lots', (period.lots || []).map((lot, i) => ({ ...lot, numero: i + 1 })));
+      AppState.set('saisie.editingKey', key);
 
-    // Afficher lots-builder dans lotsEl avec bouton Enregistrer
-    let html = '';
+      // Désactiver auto-save brouillon
+      clearTimeout(_autoSaveTimer);
+      clearTimeout(_autoSaveFirestoreTimer);
 
-    // Rappel entité
-    const entiteColor = _saisieEntite === 'INAM' ? 'var(--primary)' : 'var(--success)';
-    html += `<div style="background:${entiteColor}15;border:1px solid ${entiteColor}40;border-radius:8px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
-      <span style="font-size:18px">${_saisieEntite==='INAM'?'🏥':'💊'}</span>
-      <strong style="color:${entiteColor}">Modification — Saisie ${_saisieEntite}</strong>
-    </div>`;
+      Logger.info('Mode édition quinzaine activé', { key, entite: period.entite, nbLots: period.lots?.length });
 
-    if (!_lots.length) {
-      html += `<div style="padding:20px;text-align:center;color:var(--text-muted)">
-        <div style="font-size:40px;margin-bottom:8px">📦</div>
-        <p style="margin-bottom:16px">Aucun lot.</p>
-      </div>`;
-    } else {
-      _lots.forEach(lot => {
-        const e = lot.entite;
-        const complet = lot.bons.length >= 10;
-        html += `
-        <div class="lot-card" style="margin-bottom:14px">
-          <div class="lot-header" style="cursor:default;justify-content:space-between">
-            <h4>${lotHeaderLabel(lot)}</h4>
-            <button class="btn btn-danger btn-sm" onclick="removeLot(${lot.numero})">🗑️ Supprimer le lot</button>
-          </div>
-          <div class="lot-body open">
-            <table class="bons-table">
-              <thead><tr>
-                <th style="width:110px">BON</th>
-                <th class="th-dafeanne">💊 DAFEANNE ${e} (F)</th>
-                <th class="th-depot">🏪 DÉPÔT ${e} (F)</th>
-                <th>OBSERVATION</th>
-                <th style="width:36px"></th>
-              </tr></thead>
-              <tbody id="bon-rows-${lot.numero}">
-                ${lot.bons.map(bon => bonRow(lot.numero, bon, e)).join('')}
-              </tbody>
-              <tfoot><tr class="lot-total-row">
-                <td><strong>SOUS-TOTAL LOT ${lot.numero} — ${e}</strong></td>
-                <td class="amount th-dafeanne" id="st-${lot.numero}-df">0</td>
-                <td class="amount th-depot"    id="st-${lot.numero}-dp">0</td>
-                <td class="amount" colspan="2">Total : <strong id="st-${lot.numero}-total" style="color:var(--primary)">0</strong> F</td>
-              </tr></tfoot>
-            </table>
-            <div style="padding:12px;border-top:1px dashed var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              ${complet
-                ? `<span style="color:var(--danger);font-size:12px;font-weight:600">⚠️ Lot complet (10/10)</span>`
-                : `<button class="btn btn-outline btn-sm" onclick="addBon(${lot.numero})">➕ 1 bon</button>
-                   <button class="btn btn-outline btn-sm" onclick="add10Bons(${lot.numero})">➕ 10 bons</button>`
-              }
-              <button class="btn btn-primary btn-sm" onclick="addLot()">➕ Lot suivant →</button>
-            </div>
-          </div>
-        </div>`;
-      });
+      // Utiliser le builder unifié qui lit depuis AppState
+      renderDetailEditLotsBuilder();
+      return;
+
+    } catch (e) {
+      Logger.error('Erreur activation mode édition', { key, error: e.message });
+      toast('Erreur affichage édition: ' + e.message, 'error');
+      return;
     }
-
-    // Bouton ajouter un lot
-    html += `<div style="padding:12px;margin-top:4px">
-      <button class="btn btn-primary" style="width:100%;padding:12px;font-size:15px" onclick="addLot()">➕ Ajouter un lot</button>
-    </div>`;
-
-    // Boutons d'action en bas
-    html += `<div style="padding:20px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border);margin-top:20px">
-      <button class="btn btn-outline" onclick="navigate('quinzaines')">Annuler</button>
-      <button class="btn btn-success" onclick="saveDetailEdit('${key}')">💾 Enregistrer</button>
-    </div>`;
-
-    lotsEl.innerHTML = html;
-    _lots.forEach(l => { if (l.entite) updateLotSubtotal(l.numero); });
-    return;
   }
 
   const T = period.totaux || {};
@@ -764,9 +733,11 @@ async function openEditBon(periodKey, lotNum, bonId) {
 //  NOUVELLE QUINZAINE
 // ══════════════════════════════════════════════════════════════
 
-let _lots = [];
-let _bisMode = null;       // null | { parentKey, entite, year, month, quinzaine }
-let _saisieEntite = null;  // 'INAM' | 'AMU' — verrouillée pour toute la saisie
+// DEPRECATED: Ces variables ont été migrées vers AppState
+// - _lots → AppState.get('saisie.lots')
+// - _bisMode → AppState.get('bisMode')
+// - _saisieEntite → AppState.get('saisie.entite')
+// - _detailEditingKey → AppState.get('saisie.editingKey')
 
 function setSaisieEntite(entite) {
   try {
@@ -1120,7 +1091,10 @@ function lotHeaderLabel(lot) {
 
 // Wrapper : rerendre les lots dans le bon conteneur
 function rerenderLotsBuilder() {
-  if (_detailEditingKey) {
+  // Utiliser AppState pour savoir si on est en édition detail
+  const editingKey = AppState.get('saisie.editingKey');
+
+  if (editingKey) {
     renderDetailEditLotsBuilder();
   } else {
     renderLotsBuilder();

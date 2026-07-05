@@ -366,7 +366,51 @@ async function getAllSuiviInamAmu() {
 }
 
 async function updateSuiviInamAmu(id, data) {
-  await inamRef().doc(id).update({ ...data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  try {
+    const db = getDB();
+    const ref = inamRef().doc(id);
+
+    // TRANSACTION : vérifier la cohérence des montants
+    await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(ref);
+
+      if (!snap.exists) {
+        throw new Error('Entrée INAM/AMU introuvable');
+      }
+
+      const existing = snap.data();
+
+      // Vérifier que montantPaye ≤ montantFacture
+      const montantFacture = data.montantFacture !== undefined ? data.montantFacture : existing.montantFacture;
+      const montantPaye = data.montantPaye !== undefined ? data.montantPaye : existing.montantPaye;
+
+      if (montantPaye < 0) {
+        throw new Error('Montant payé ne peut pas être négatif');
+      }
+
+      if (montantFacture < 0) {
+        throw new Error('Montant facture ne peut pas être négatif');
+      }
+
+      if (montantPaye > montantFacture) {
+        throw new Error(`Montant payé (${montantPaye} F) ne peut pas dépasser la facture (${montantFacture} F)`);
+      }
+
+      // Update atomiquement
+      const updates = {
+        ...data,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      transaction.update(ref, updates);
+    });
+
+    Logger.info('Entrée INAM/AMU mise à jour (transaction)', { id, montantFacture: data.montantFacture });
+
+  } catch (e) {
+    Logger.error('Erreur updateSuiviInamAmu (transaction)', { id, error: e.message });
+    throw e;
+  }
 }
 
 async function deleteSuiviInamAmu(id) {
@@ -381,10 +425,69 @@ function caisseRef(pharmacieId) {
 }
 
 async function saveCaisseOp(data) {
-  const ref = data.id ? caisseRef().doc(data.id) : caisseRef().doc();
-  const id = ref.id;
-  await ref.set({ ...data, id, createdAt: data.createdAt || firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
-  return id;
+  try {
+    const db = getDB();
+    const ref = data.id ? caisseRef().doc(data.id) : caisseRef().doc();
+    const id = ref.id;
+
+    // Validations basiques
+    if (!data.date) throw new Error('Date requise');
+    if (data.montant === undefined || data.montant === null) throw new Error('Montant requis');
+    if (data.type !== 'recharge' && data.type !== 'depense') throw new Error('Type invalide (recharge ou depense)');
+
+    if (data.montant < 0) {
+      throw new Error('Montant ne peut pas être négatif');
+    }
+
+    // Si UPDATE (data.id existe), vérifier la cohérence avec transaction
+    if (data.id) {
+      await db.runTransaction(async (transaction) => {
+        const snap = await transaction.get(ref);
+
+        if (!snap.exists) {
+          throw new Error('Opération caisse introuvable');
+        }
+
+        // Créer les données à mettre à jour
+        const caisseData = {
+          ...data,
+          id,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        // Update atomiquement
+        transaction.update(ref, caisseData);
+      });
+
+      Logger.info('Opération caisse mise à jour (transaction)', {
+        id,
+        type: data.type,
+        montant: data.montant
+      });
+
+    } else {
+      // CREATE : simple set
+      const caisseData = {
+        ...data,
+        id,
+        createdAt: data.createdAt || firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      await ref.set(caisseData, { merge: true });
+
+      Logger.info('Opération caisse créée', {
+        id,
+        type: data.type,
+        montant: data.montant
+      });
+    }
+
+    return id;
+
+  } catch (e) {
+    Logger.error('Erreur saveCaisseOp', { error: e.message, type: data?.type });
+    throw e;
+  }
 }
 
 async function getAllCaisseOps() {
@@ -411,26 +514,73 @@ function facturesRef(pharmacieId) {
 
 async function saveFacture(data) {
   try {
+    const db = getDB();
+
     // Valider champs requis
     if (!data.fournisseur) throw new Error('Fournisseur requis');
     if (data.montant === undefined || data.montant === null) throw new Error('Montant requis');
 
+    if (data.montant < 0) throw new Error('Montant ne peut pas être négatif');
+
+    // Vérifier cohérence des dates si présentes
+    if (data.dateFacture && data.echeance) {
+      if (data.dateFacture > data.echeance) {
+        throw new Error('Date facture ne peut pas être après la date d\'échéance');
+      }
+    }
+
     const ref = data.id ? facturesRef().doc(data.id) : facturesRef().doc();
     const id = ref.id;
 
-    const factureData = {
-      ...data,
-      id,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
+    // Si UPDATE (data.id existe), utiliser une transaction pour vérifier l'état
+    if (data.id) {
+      await db.runTransaction(async (transaction) => {
+        const snap = await transaction.get(ref);
 
-    if (!data.id) {
-      factureData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        if (!snap.exists) {
+          throw new Error('Facture introuvable');
+        }
+
+        const existing = snap.data();
+
+        // Si le statut passe à "payé", vérifier que montantPaye existe
+        if (data.statut === 'payé' && !data.datePaiement) {
+          throw new Error('Date paiement requise pour marquer comme payée');
+        }
+
+        const factureData = {
+          ...data,
+          id,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        transaction.update(ref, factureData);
+      });
+
+      Logger.info('Facture mise à jour (transaction)', {
+        id,
+        fournisseur: data.fournisseur,
+        montant: data.montant,
+        statut: data.statut
+      });
+
+    } else {
+      // CREATE : simple set
+      const factureData = {
+        ...data,
+        id,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      await ref.set(factureData, { merge: true });
+
+      Logger.info('Facture créée', {
+        id,
+        fournisseur: data.fournisseur,
+        montant: data.montant
+      });
     }
-
-    Logger.info('Sauvegarde facture', { id, fournisseur: data.fournisseur, montant: data.montant });
-    await ref.set(factureData, { merge: true });
-    Logger.info('Facture sauvegardée', { id });
 
     return id;
 

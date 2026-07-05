@@ -1036,6 +1036,16 @@ function removeBon(lotNum, bonId) {
       return;
     }
 
+    // Trouver le bon pour afficher son label dans la confirmation
+    const bon = lot.bons.find(b => String(b.id) === String(bonId));
+    const bonLabel = bon?.label || `BON N°${bon?.numero || '?'}`;
+
+    // Demander confirmation (IMPORTANT: évite les suppressions accidentelles)
+    if (!confirm(`Supprimer ${bonLabel} du LOT N°${lotNum} ?`)) {
+      Logger.debug('Suppression bon annulée', { lotNum, bonId });
+      return;
+    }
+
     const oldCount = lot.bons.length;
 
     // Filtrer le bon
@@ -1052,8 +1062,10 @@ function removeBon(lotNum, bonId) {
 
     Logger.info('Bon supprimé', { lotNum, bonId, remaining: lot.bons.length });
 
-    // Update DOM
+    // Update DOM : supprimer la ligne du tableau
     document.getElementById(`row-${bonId}`)?.remove();
+
+    // Renuméroter visuellement les bons restants
     const tbody = document.getElementById(`bon-rows-${lotNum}`);
     if (tbody) {
       // Renumeroter les numéros visuels
@@ -1062,13 +1074,16 @@ function removeBon(lotNum, bonId) {
         if (strong) strong.textContent = `BON N°${i + 1}`;
       });
 
-      // Mettre à jour le header du lot
-      const header = tbody.closest('.lot-card').querySelector('.lot-header h4');
+      // Mettre à jour le header du lot (affiche le compte)
+      const header = tbody.closest('.lot-card')?.querySelector('.lot-header h4');
       if (header) header.innerHTML = lotHeaderLabel(lot);
     }
 
+    // Recalculer les totaux
     updateLotSubtotal(lotNum);
     autoSaveDraft();
+
+    toast(`${bonLabel} supprimé ✓`, 'success');
 
   } catch (e) {
     Logger.error('Erreur removeBon', { lotNum, bonId, error: e.message });

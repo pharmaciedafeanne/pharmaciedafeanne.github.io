@@ -616,51 +616,175 @@ function toggleLot(num) {
 
 // ── Ajouter un bon à une quinzaine existante ─────────────────
 async function addBonToExisting(periodKey, lotNum) {
-  const snap = await getQuinzaineDocRef(periodKey).get();
-  if (!snap.exists) return;
-  const period = snap.data();
-  const lot = (period.lots || []).find(l => l.numero === lotNum);
-  if (!lot) return;
-  if ((lot.bons || []).length >= 10) {
-    toast(`⚠️ LOT N°${lotNum}${lot.entite?' ('+lot.entite+')':''} a atteint 10 bons. Créez un nouveau lot pour continuer.`, 'info');
-    return;
-  }
-  const bonNum = (lot.bons || []).length + 1;
-  lot.bons.push({
-    id: `bon_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
-    numero: bonNum,
-    label: `BON N°${bonNum}`,
-    dafeanne: { inam: 0, amu: 0 },
-    depot:    { inam: 0, amu: 0 },
-    remarque: ''
-  });
   try {
-    await savePeriod(period);
+    const db = getDB();
+    const ref = getQuinzaineDocRef(periodKey);
+
+    // TRANSACTION ATOMIQUE : read → modify → write
+    const result = await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(ref);
+
+      if (!snap.exists) {
+        throw new Error('Quinzaine introuvable');
+      }
+
+      const period = snap.data();
+      const lot = (period.lots || []).find(l => l.numero === lotNum);
+
+      if (!lot) {
+        throw new Error(`Lot N°${lotNum} introuvable`);
+      }
+
+      // Vérifier la limite de 10 bons
+      const bonCount = (lot.bons || []).length;
+      if (bonCount >= 10) {
+        throw new Error(
+          `⚠️ LOT N°${lotNum}${lot.entite ? ' (' + lot.entite + ')' : ''} a atteint 10 bons. ` +
+          `Créez un nouveau lot pour continuer.`
+        );
+      }
+
+      // Créer le nouveau bon
+      const bonNum = bonCount + 1;
+      const newBon = {
+        id: `bon_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        numero: bonNum,
+        label: `BON N°${bonNum}`,
+        dafeanne: { inam: 0, amu: 0 },
+        depot: { inam: 0, amu: 0 },
+        remarque: ''
+      };
+
+      // Ajouter le bon au lot
+      if (!lot.bons) lot.bons = [];
+      lot.bons.push(newBon);
+
+      // Recalculer les totaux du lot
+      period.totaux = recalcPeriod(period).totaux;
+
+      // Mettre à jour le timestamp
+      period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+
+      // Écrire atomiquement dans la transaction
+      transaction.update(ref, period);
+
+      return { bonNum, lot };
+    });
+
+    // Après la transaction réussie
+    Logger.info('Bon ajouté (transaction)', {
+      periodKey,
+      lotNum,
+      bonNum: result.bonNum,
+      bonCount: result.lot.bons.length
+    });
+
     renderDetail(periodKey);
-    toast(`BON N°${bonNum} ajouté au lot ${lotNum}`, 'success');
+    toast(`BON N°${result.bonNum} ajouté au lot ${lotNum} ✓`, 'success');
+
     // Ouvrir le lot et scroller vers le nouveau bon
     setTimeout(() => {
       const lotBody = document.getElementById(`lot-body-${lotNum}`);
       if (lotBody && !lotBody.classList.contains('open')) toggleLot(lotNum);
     }, 100);
-  } catch(e) { toast('Erreur: ' + e.message, 'error'); }
+
+  } catch (e) {
+    Logger.error('Erreur addBonToExisting (transaction)', {
+      periodKey,
+      lotNum,
+      error: e.message
+    });
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 // ── Supprimer un bon d'une quinzaine existante ───────────────
 async function deleteExistingBon(periodKey, lotNum, bonId) {
-  if (!confirm('Supprimer ce bon ?')) return;
-  const snap = await getQuinzaineDocRef(periodKey).get();
-  if (!snap.exists) return;
-  const period = snap.data();
-  const lot = (period.lots || []).find(l => l.numero === lotNum);
-  if (!lot) return;
-  lot.bons = (lot.bons || []).filter(b => String(b.id) !== String(bonId));
-  lot.bons.forEach((b, i) => { b.numero = i + 1; b.label = `BON N°${i + 1}`; });
+  if (!confirm('Supprimer ce bon ?')) {
+    Logger.debug('Suppression bon annulée', { periodKey, lotNum, bonId });
+    return;
+  }
+
   try {
-    await savePeriod(period);
+    const db = getDB();
+    const ref = getQuinzaineDocRef(periodKey);
+
+    // TRANSACTION ATOMIQUE : read → modify → write
+    const result = await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(ref);
+
+      if (!snap.exists) {
+        throw new Error('Quinzaine introuvable');
+      }
+
+      const period = snap.data();
+      const lot = (period.lots || []).find(l => l.numero === lotNum);
+
+      if (!lot) {
+        throw new Error(`Lot N°${lotNum} introuvable`);
+      }
+
+      // Trouver et valider le bon
+      const bonIndex = (lot.bons || []).findIndex(b => String(b.id) === String(bonId));
+      if (bonIndex === -1) {
+        throw new Error('Bon introuvable');
+      }
+
+      const bonToDelete = lot.bons[bonIndex];
+      const oldBonCount = lot.bons.length;
+
+      // Supprimer le bon
+      lot.bons = lot.bons.filter(b => String(b.id) !== String(bonId));
+
+      // Renuméroter les bons restants (IMPORTANT: évite les incohérences)
+      lot.bons.forEach((b, i) => {
+        b.numero = i + 1;
+        b.label = `BON N°${i + 1}`;
+      });
+
+      // Recalculer les totaux du lot
+      period.totaux = recalcPeriod(period).totaux;
+
+      // Mettre à jour le timestamp
+      period.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+
+      // Écrire atomiquement dans la transaction
+      transaction.update(ref, period);
+
+      return {
+        bonLabel: bonToDelete.label || `BON N°${bonToDelete.numero}`,
+        oldBonCount,
+        newBonCount: lot.bons.length
+      };
+    });
+
+    // Après la transaction réussie
+    Logger.info('Bon supprimé (transaction)', {
+      periodKey,
+      lotNum,
+      bonLabel: result.bonLabel,
+      bonCount: result.oldBonCount + ' → ' + result.newBonCount
+    });
+
     renderDetail(periodKey);
-    toast('Bon supprimé', 'success');
-  } catch(e) { toast('Erreur: ' + e.message, 'error'); }
+    toast(`${result.bonLabel} supprimé ✓`, 'success');
+
+    // Logguer l'action pour audit
+    logAction(
+      'Suppression bon',
+      `LOT N°${lotNum}: ${result.bonLabel}`,
+      currentUser?.name || ''
+    );
+
+  } catch (e) {
+    Logger.error('Erreur deleteExistingBon (transaction)', {
+      periodKey,
+      lotNum,
+      bonId,
+      error: e.message
+    });
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 // ── Modifier un bon ──────────────────────────────────────────

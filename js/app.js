@@ -3382,7 +3382,7 @@ function onProspectiveChange() {
 function openNewFacture() {
   // Réinitialiser formulaire
   const fields = ['facture-id', 'facture-fournisseur', 'facture-date', 'facture-echeance',
-                  'facture-designation', 'facture-obs', 'facture-mode', 'facture-ref'];
+                  'facture-designation', 'facture-obs', 'facture-mode', 'facture-ref', 'facture-date-paye'];
   fields.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -3441,7 +3441,7 @@ async function saveFactureForm() {
     const fournisseur = document.getElementById('facture-fournisseur').value.trim();
     const dateFacture = document.getElementById('facture-date').value;
     const echeance    = document.getElementById('facture-echeance').value;
-    const montant     = parseFloat(document.getElementById('facture-montant').value) || 0;
+    const montant     = Math.max(0, parseFloat(document.getElementById('facture-montant').value) || 0);
     const designation = document.getElementById('facture-designation').value.trim();
     const statut      = document.getElementById('facture-statut').value;
     const datePaye    = document.getElementById('facture-date-paye').value;
@@ -3449,7 +3449,7 @@ async function saveFactureForm() {
     const mode        = document.getElementById('facture-mode').value;
     const ref         = document.getElementById('facture-ref').value.trim();
     const prospective = document.getElementById('facture-prospective').checked;
-    const alerteJours = prospective ? (parseInt(document.getElementById('facture-alerte-jours').value) || 7) : null;
+    const alerteJours = prospective ? Math.max(1, parseInt(document.getElementById('facture-alerte-jours').value) || 7) : null;
 
     // 2. Valider les données
     const facture = validateFacture({

@@ -500,7 +500,14 @@
           <div class="card-header" style="flex-wrap:wrap;gap:10px">
             <span class="card-title">🏪 Factures Fournisseurs</span>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <div class="filter-tabs">
+              <!-- Vue Active / Archives -->
+              <div style="display:flex;gap:6px;border-right:1px solid var(--border);padding-right:8px">
+                <button class="btn btn-outline btn-sm" id="frs-btn-active" style="font-weight:700" onclick="switchFrsView('active')">📋 Actives</button>
+                <button class="btn btn-outline btn-sm" id="frs-btn-archives" onclick="switchFrsView('archives')">📦 Archives</button>
+              </div>
+
+              <!-- Filtres (actifs seulement) -->
+              <div id="frs-filters-active" class="filter-tabs">
                 <button class="filter-tab active" id="frs-tab-all"    onclick="setFrsFilter('all')">Toutes</button>
                 <button class="filter-tab"        id="frs-tab-apayer" onclick="setFrsFilter('apayer')">À payer</button>
                 <button class="filter-tab"        id="frs-tab-payees" onclick="setFrsFilter('payees')">Payées</button>
@@ -516,10 +523,20 @@
             </div>
           </div>
           <div id="frs-notif-bar" class="hidden frs-notif-bar"></div>
-          <div class="table-wrapper">
+
+          <!-- Vue Actives -->
+          <div id="frs-view-active" class="table-wrapper">
             <table>
               <thead><tr><th>Date</th><th>Fournisseur</th><th>Désignation</th><th>Montant</th><th>Échéance</th><th>Jours</th><th>Paiement</th><th>Statut</th><th>Actions</th></tr></thead>
               <tbody id="frs-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- Vue Archives -->
+          <div id="frs-view-archives" style="display:none" class="table-wrapper">
+            <table>
+              <thead><tr><th>Date</th><th>Fournisseur</th><th>Désignation</th><th>Montant</th><th>Échéance</th><th>Paiement</th><th>Statut</th><th>Archivée</th><th>Actions</th></tr></thead>
+              <tbody id="frs-archives-tbody"></tbody>
             </table>
           </div>
         </div>

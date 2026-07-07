@@ -3177,11 +3177,30 @@ async function renderFournisseurs() {
   tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px">Chargement…</td></tr>`;
   try {
     const list = await getAllFactures();
+
+    // Exclure les archives
+    const activeList = list.filter(f => !f.archived);
+
     const now  = Date.now();
     const limit72 = now + 72 * 3600 * 1000;
 
+    // Remplir le select des mois
+    const moisUniques = new Set();
+    activeList.forEach(f => {
+      if (f.dateFacture) {
+        const mois = f.dateFacture.substring(0, 7); // YYYY-MM
+        moisUniques.add(mois);
+      }
+    });
+    const selectMois = document.getElementById('frs-filter-month');
+    if (selectMois) {
+      const moisArray = Array.from(moisUniques).sort().reverse();
+      selectMois.innerHTML = '<option value="">Tous les mois</option>' +
+        moisArray.map(m => `<option value="${m}">${m}</option>`).join('');
+    }
+
     // Alertes 72h ou selon alerteJours custom
-    const alerts = list.filter(f => {
+    const alerts = activeList.filter(f => {
       if (f.statut === 'payé') return false;
       if (!f.echeance) return false;
       const ts = new Date(f.echeance).getTime();
@@ -3196,10 +3215,10 @@ async function renderFournisseurs() {
       } else notifBar.classList.add('hidden');
     }
 
-    // Stats
-    const total   = list.reduce((s,f) => s+(f.montant||0), 0);
-    const paye    = list.reduce((s,f) => s+(f.statut==='payé'?(f.montant||0):0), 0);
-    const encours = list.filter(f => f.statut === 'en cours').length;
+    // Stats (sur les factures actives uniquement)
+    const total   = activeList.reduce((s,f) => s+(f.montant||0), 0);
+    const paye    = activeList.reduce((s,f) => s+(f.statut==='payé'?(f.montant||0):0), 0);
+    const encours = activeList.filter(f => f.statut === 'en cours').length;
     const el_tot  = document.getElementById('frs-stat-total');
     const el_due  = document.getElementById('frs-stat-due');
     const el_enc  = document.getElementById('frs-stat-encours');
@@ -3211,7 +3230,7 @@ async function renderFournisseurs() {
 
     // Filtre par mois
     const filtreMois = (document.getElementById('frs-filter-month') || {}).value || '';
-    let filtered = filtreMois ? list.filter(f => (f.dateFacture||'').startsWith(filtreMois)) : list;
+    let filtered = filtreMois ? activeList.filter(f => (f.dateFacture||'').startsWith(filtreMois)) : activeList;
 
     // Filtre par statut
     if (_frsStatutFilter === 'apayer') filtered = filtered.filter(f => f.statut !== 'payé');
@@ -3272,7 +3291,16 @@ async function quickChangeStatutFacture(id, newStatut) {
     Validation.requireEnum(newStatut, 'Statut', Object.values(FACTURE_STATUS));
 
     Logger.info('Changement statut facture', { id, newStatut });
-    await updateFacture(id, { statut: newStatut });
+
+    // Si statut "payé", archiver automatiquement
+    const updateData = { statut: newStatut };
+    if (newStatut === 'payé') {
+      updateData.archived = true;
+      updateData.archivedAt = firebase.firestore.FieldValue.serverTimestamp();
+      Logger.info('Facture archivée automatiquement (statut payé)', { id });
+    }
+
+    await updateFacture(id, updateData);
 
     toast(`Statut mis à jour → ${FACTURE_STATUS_LABELS[newStatut]} ✓`, 'success');
     Logger.info('Statut facture mis à jour avec succès', { id, newStatut });
@@ -3374,6 +3402,64 @@ async function exportFrsUrgent() {
   } catch(e) { toast('Erreur export: '+e.message,'error'); }
 }
 
+async function exportFrsApayerByMonth() {
+  try {
+    const list = await getAllFactures();
+    const filtreMois = (document.getElementById('frs-filter-month')||{}).value||'';
+
+    if (!filtreMois) {
+      toast('Sélectionnez un mois pour exporter', 'warning');
+      return;
+    }
+
+    // Filtrer : mois sélectionné + non payées + non archivées
+    let filtered = list.filter(f =>
+      !f.archived &&
+      f.statut !== 'payé' &&
+      (f.dateFacture||'').startsWith(filtreMois)
+    );
+
+    if (!filtered.length) {
+      toast('Aucune facture "à payer" pour ce mois', 'info');
+      return;
+    }
+
+    // Créer Excel
+    const wb = XLSX.utils.book_new();
+    const rows = [['Date','Fournisseur','Désignation','Montant','Échéance','Jours restants','Statut','Observations']];
+    const now = Date.now();
+
+    filtered.forEach(f => {
+      let joursTexte = '—';
+      if (f.echeance) {
+        const ts = new Date(f.echeance).getTime();
+        const jours = Math.ceil((ts - now) / 86400000);
+        joursTexte = jours < 0 ? 'Expiré' : jours === 0 ? 'Aujourd\'hui' : jours + 'j';
+      }
+      rows.push([
+        f.dateFacture||'',
+        f.fournisseur||'',
+        f.designation||'',
+        f.montant||0,
+        f.echeance||'',
+        joursTexte,
+        f.statut||'',
+        f.note||''
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'À payer');
+    XLSX.writeFile(wb, `FACTURES_APAYER_${filtreMois}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast(`Export ${filtered.length} facture(s) "à payer" ✓`, 'success');
+    Logger.info('Export factures à payer', { mois: filtreMois, count: filtered.length });
+
+  } catch(e) {
+    Logger.error('Erreur export à payer', { error: e.message });
+    toast('Erreur export: ' + e.message, 'error');
+  }
+}
+
 function onProspectiveChange() {
   const checked = document.getElementById('facture-prospective').checked;
   const row = document.getElementById('facture-alerte-row');
@@ -3452,7 +3538,13 @@ async function saveFactureForm() {
     const prospective = document.getElementById('facture-prospective').checked;
     const alerteJours = prospective ? Math.max(1, parseInt(document.getElementById('facture-alerte-jours').value) || 7) : null;
 
-    // 2. Valider les données
+    // 2. Validation spécifique: date paiement obligatoire si statut "payé"
+    if (statut === 'payé' && !datePaye) {
+      toast('Date paiement obligatoire quand le statut est "Payé"', 'error');
+      return;
+    }
+
+    // 3. Valider les données
     const facture = validateFacture({
       fournisseur,
       dateFacture,
@@ -3468,10 +3560,10 @@ async function saveFactureForm() {
       alerteJours
     });
 
-    // 3. Récupérer les données existantes si édition
+    // 4. Récupérer les données existantes si édition
     const existing = id ? (await getAllFactures()).find(f => f.id === id) : null;
 
-    // 4. Sauvegarder
+    // 5. Sauvegarder
     Logger.info(`${id ? 'Modification' : 'Création'} facture`, { fournisseur, montant });
     await saveFacture({
       id: id || undefined,
@@ -3479,7 +3571,7 @@ async function saveFactureForm() {
       montantPaye: existing ? (existing.montantPaye || 0) : 0
     });
 
-    // 5. UI feedback
+    // 6. UI feedback
     closeModal();
     toast('Facture enregistrée ✓', 'success');
     logAction(

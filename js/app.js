@@ -3224,10 +3224,10 @@ async function renderFournisseurs() {
       } else notifBar.classList.add('hidden');
     }
 
-    // Stats (sur les factures actives uniquement)
-    const total   = activeList.reduce((s,f) => s+(f.montant||0), 0);
-    const paye    = activeList.reduce((s,f) => s+(f.statut==='payé'?(f.montant||0):0), 0);
-    const encours = activeList.filter(f => f.statut === 'en cours').length;
+    // Stats (sur TOUTES les factures pour avoir l'historique complet)
+    const total   = list.reduce((s,f) => s+(f.montant||0), 0);
+    const paye    = list.reduce((s,f) => s+(f.statut==='payé'?(f.montant||0):0), 0);
+    const encours = list.filter(f => f.statut === 'en cours' && !f.archived).length;
     const el_tot  = document.getElementById('frs-stat-total');
     const el_due  = document.getElementById('frs-stat-due');
     const el_enc  = document.getElementById('frs-stat-encours');
@@ -3295,6 +3295,7 @@ async function renderFournisseurs() {
         <td>
           <button class="btn btn-outline btn-sm" onclick="openEditFacture('${f.id}')">✏️</button>
           <button class="btn btn-outline btn-sm" onclick="openPayFacture('${f.id}')">💳</button>
+          <button class="btn btn-warning btn-sm" onclick="archiveFacture('${f.id}')">📦</button>
           <button class="btn btn-danger btn-sm btn-icon" onclick="doDeleteFacture('${f.id}')">🗑️</button>
         </td>
       </tr>`;
@@ -3309,15 +3310,8 @@ async function quickChangeStatutFacture(id, newStatut) {
 
     Logger.info('Changement statut facture', { id, newStatut });
 
-    // Si statut "payé", archiver automatiquement
-    const updateData = { statut: newStatut };
-    if (newStatut === 'payé') {
-      updateData.archived = true;
-      updateData.archivedAt = firebase.firestore.FieldValue.serverTimestamp();
-      Logger.info('Facture archivée automatiquement (statut payé)', { id });
-    }
-
-    await updateFacture(id, updateData);
+    // Mise à jour du statut uniquement (pas d'archivage automatique)
+    await updateFacture(id, { statut: newStatut });
 
     toast(`Statut mis à jour → ${FACTURE_STATUS_LABELS[newStatut]} ✓`, 'success');
     Logger.info('Statut facture mis à jour avec succès', { id, newStatut });
@@ -3325,6 +3319,55 @@ async function quickChangeStatutFacture(id, newStatut) {
 
   } catch (e) {
     Logger.error('Erreur changement statut facture', { id, newStatut, error: e.message });
+    toast('Erreur: ' + e.message, 'error');
+  }
+}
+
+async function archiveFacture(id) {
+  if (!confirm('Archiver cette facture? Elle sera déplacée dans les archives.')) {
+    Logger.debug('Archivage facture annulé par l\'utilisateur', { id });
+    return;
+  }
+
+  try {
+    Logger.info('Archivage facture', { id });
+    await updateFacture(id, {
+      archived: true,
+      archivedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    toast('Facture archivée ✓ (consultable dans Archives)', 'success');
+    logAction('Archive facture', id, currentUser?.name || '');
+    Logger.info('Facture archivée avec succès', { id });
+    renderFournisseurs();
+
+  } catch (e) {
+    Logger.error('Erreur archivage facture', { id, error: e.message });
+    toast('Erreur: ' + e.message, 'error');
+  }
+}
+
+async function restoreFacture(id) {
+  if (!confirm('Restaurer cette facture?')) {
+    Logger.debug('Restauration facture annulée par l\'utilisateur', { id });
+    return;
+  }
+
+  try {
+    Logger.info('Restauration facture', { id });
+    await updateFacture(id, {
+      archived: false,
+      archivedAt: firebase.firestore.FieldValue.delete()
+    });
+
+    toast('Facture restaurée ✓', 'success');
+    logAction('Restaurer facture', id, currentUser?.name || '');
+    Logger.info('Facture restaurée avec succès', { id });
+    renderFournisseurs();
+    renderArchives();
+
+  } catch (e) {
+    Logger.error('Erreur restauration facture', { id, error: e.message });
     toast('Erreur: ' + e.message, 'error');
   }
 }

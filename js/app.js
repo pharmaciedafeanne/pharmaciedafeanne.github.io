@@ -1025,7 +1025,8 @@ function addLot() {
   addBon(numero); // premier bon automatique
   rerenderLotsBuilder();
   setTimeout(() => {
-    const builder = document.getElementById('lots-builder');
+    const editingKey = AppState.get('saisie.editingKey');
+    const builder = document.getElementById(editingKey ? 'lots-container' : 'lots-builder');
     if (builder && builder.lastElementChild) {
       builder.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -1427,12 +1428,12 @@ function bonRow(lotNum, bon, entite) {
   const e = (entite || 'inam').toLowerCase();
   const dfVal = (bon.dafeanne && bon.dafeanne[e]) || 0;
   const dpVal = (bon.depot    && bon.depot[e])    || 0;
-  return `<tr id="row-${bon.id}">
-    <td><strong>${bon.label}</strong></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="dafeanne" data-field="${e}" value="${dfVal}" oninput="updateCell(this)"></td>
-    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${bon.id}" data-account="depot"    data-field="${e}" value="${dpVal}" oninput="updateCell(this)"></td>
-    <td><input type="text" class="cell-input cell-remark" data-lot="${lotNum}" data-bon="${bon.id}" data-account="remarque" data-field="remarque" value="${esc(bon.remarque)}" oninput="updateCell(this)" placeholder="Observation…"></td>
-    <td><button class="btn btn-danger btn-sm btn-icon" onclick="removeBon(${lotNum},'${bon.id}')" title="Supprimer ce bon">×</button></td>
+  return `<tr id="row-${esc(bon.id)}">
+    <td><strong>${esc(bon.label)}</strong></td>
+    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${esc(bon.id)}" data-account="dafeanne" data-field="${e}" value="${dfVal}" oninput="updateCell(this)"></td>
+    <td><input type="number" min="0" class="cell-input" data-lot="${lotNum}" data-bon="${esc(bon.id)}" data-account="depot"    data-field="${e}" value="${dpVal}" oninput="updateCell(this)"></td>
+    <td><input type="text" class="cell-input cell-remark" data-lot="${lotNum}" data-bon="${esc(bon.id)}" data-account="remarque" data-field="remarque" value="${esc(bon.remarque)}" oninput="updateCell(this)" placeholder="Observation…"></td>
+    <td><button class="btn btn-danger btn-sm btn-icon" onclick="removeBon(${lotNum},'${esc(bon.id)}')" title="Supprimer ce bon">×</button></td>
   </tr>`;
 }
 

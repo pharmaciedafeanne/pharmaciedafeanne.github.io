@@ -124,6 +124,12 @@ function validateFacture(data) {
     } catch (e) { errors.push(e); }
   }
 
+  if (data.datePaye) {
+    try {
+      data.datePaye = Validation.requireDate(data.datePaye, 'Date paiement');
+    } catch (e) { errors.push(e); }
+  }
+
   if (errors.length > 0) {
     throw new ValidationError('facture',
       `Validation échouée: ${errors.map(e => e.message).join('; ')}`);

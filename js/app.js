@@ -1764,8 +1764,8 @@ function updateLotSubtotal(lotNum) {
     const lots = AppState.get('saisie.lots');
     const lot = lots.find(l => l.numero === lotNum);
 
-    if (!lot || !lot.entite) {
-      Logger.debug('Lot non trouvé ou sans entité pour updateLotSubtotal', { lotNum });
+    if (!lot || !lot.entite || typeof lot.entite !== 'string') {
+      Logger.debug('Lot non trouvé ou sans entité valide pour updateLotSubtotal', { lotNum, lotEntite: lot?.entite, lotEntiteType: typeof lot?.entite });
       return;
     }
 

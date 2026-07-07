@@ -3166,6 +3166,23 @@ function toggleProspect(cb) {
 
 let _frsStatutFilter = 'all'; // 'all' | 'apayer' | 'payees'
 
+// Fonction réutilisable pour filtrer les factures
+function applyFrsFilters(list, mois, statut, options = {}) {
+  const { excludeArchived = true } = options;
+
+  let filtered = mois ? list.filter(f => (f.dateFacture||'').startsWith(mois)) : list;
+
+  if (statut === 'apayer') {
+    filtered = filtered.filter(f => f.statut !== 'payé' && (excludeArchived ? !f.archived : true));
+  } else if (statut === 'payees') {
+    filtered = filtered.filter(f => f.statut === 'payé');
+  } else {
+    if (excludeArchived) filtered = filtered.filter(f => !f.archived);
+  }
+
+  return filtered;
+}
+
 function setFrsFilter(f) {
   _frsStatutFilter = f;
   ['all','apayer','payees'].forEach(k => {
@@ -3303,6 +3320,56 @@ async function renderFournisseurs() {
   } catch(e) { console.error(e); toast('Erreur chargement fournisseurs','error'); }
 }
 
+async function renderArchives() {
+  const tableBody = document.getElementById('frs-archives-tbody');
+  if (!tableBody) return;
+  tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px">Chargement…</td></tr>`;
+  try {
+    const list = await getAllFactures();
+    const archived = list.filter(f => f.archived);
+
+    if (!archived.length) {
+      tableBody.innerHTML = `<tr><td colspan="9"><div class="empty-state">
+        <div class="empty-icon">📦</div><h3>Pas d'archives</h3>
+        <p>Les factures archivées apparaîtront ici.</p></div></td></tr>`;
+      return;
+    }
+
+    const now = Date.now();
+    tableBody.innerHTML = archived.map(f => {
+      const archivedDate = f.archivedAt ? new Date(f.archivedAt.seconds * 1000).toLocaleDateString('fr-FR') : '—';
+      return `<tr style="opacity:0.7">
+        <td>${esc(f.dateFacture||'—')}</td>
+        <td><strong>${esc(f.fournisseur||'—')}</strong></td>
+        <td>${esc(f.designation||'—')}</td>
+        <td class="amount">${fmtA(f.montant)}</td>
+        <td>${esc(f.echeance||'—')}</td>
+        <td class="amount" style="color:var(--success)">${fmtA(f.montantPaye||0)}</td>
+        <td><span style="font-size:12px;color:var(--text-muted)">${f.statut||''}</span></td>
+        <td><span style="font-size:12px;color:var(--text-muted)">📦 ${archivedDate}</span></td>
+        <td>
+          <button class="btn btn-success btn-sm" onclick="restoreFacture('${f.id}')">↩️ Restaurer</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="doDeleteFacture('${f.id}')">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error(e); toast('Erreur chargement archives','error'); }
+}
+
+function switchFrsView(view) {
+  const isActive = view === 'active';
+  document.getElementById('frs-view-active').style.display = isActive ? '' : 'none';
+  document.getElementById('frs-view-archives').style.display = isActive ? 'none' : '';
+  document.getElementById('frs-filters-active').style.display = isActive ? '' : 'none';
+
+  const btnActive = document.getElementById('frs-btn-active');
+  const btnArchives = document.getElementById('frs-btn-archives');
+  if (btnActive) btnActive.classList.toggle('active', isActive);
+  if (btnArchives) btnArchives.classList.toggle('active', !isActive);
+
+  if (!isActive) renderArchives();
+}
+
 async function quickChangeStatutFacture(id, newStatut) {
   try {
     // Valider le statut
@@ -3376,9 +3443,7 @@ async function exportFrsExcel() {
   try {
     const list = await getAllFactures();
     const filtreMois = (document.getElementById('frs-filter-month')||{}).value||'';
-    let filtered = filtreMois ? list.filter(f=>(f.dateFacture||'').startsWith(filtreMois)) : list;
-    if (_frsStatutFilter === 'apayer') filtered = filtered.filter(f => f.statut !== 'payé');
-    else if (_frsStatutFilter === 'payees') filtered = filtered.filter(f => f.statut === 'payé');
+    const filtered = applyFrsFilters(list, filtreMois, _frsStatutFilter, { excludeArchived: false });
     if (!filtered.length) { toast('Aucune donnée à exporter','error'); return; }
     const wb = XLSX.utils.book_new();
     const rows = [['Date','Fournisseur','Désignation','Montant','Échéance','Montant payé','Statut','Observations']];
@@ -3395,9 +3460,7 @@ async function exportFrsPDF() {
   try {
     const list = await getAllFactures();
     const filtreMois = (document.getElementById('frs-filter-month')||{}).value||'';
-    let filtered = filtreMois ? list.filter(f=>(f.dateFacture||'').startsWith(filtreMois)) : list;
-    if (_frsStatutFilter === 'apayer') filtered = filtered.filter(f => f.statut !== 'payé');
-    else if (_frsStatutFilter === 'payees') filtered = filtered.filter(f => f.statut === 'payé');
+    const filtered = applyFrsFilters(list, filtreMois, _frsStatutFilter, { excludeArchived: false });
     if (!filtered.length) { toast('Aucune donnée à exporter','error'); return; }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation:'landscape' });
@@ -3430,10 +3493,8 @@ async function exportFrsUrgent() {
       return ts >= now && ts <= now + jours;
     });
 
-    // Ajouter filtre mois
-    if (filtreMois) {
-      filtered = filtered.filter(f => (f.dateFacture||'').startsWith(filtreMois));
-    }
+    // Appliquer filtre mois
+    if (filtreMois) filtered = filtered.filter(f => (f.dateFacture||'').startsWith(filtreMois));
 
     if (!filtered.length) { toast('Aucune facture urgente à exporter','info'); return; }
 
@@ -3442,17 +3503,7 @@ async function exportFrsUrgent() {
     filtered.forEach(f => {
       const ts = new Date(f.echeance).getTime();
       const jours = Math.ceil((ts - now) / 86400000);
-      rows.push([
-        f.dateFacture||'',
-        f.fournisseur||'',
-        f.designation||'',
-        f.montant||0,
-        f.echeance||'',
-        jours,
-        f.montantPaye||0,
-        f.statut||'',
-        f.note||''
-      ]);
+      rows.push([f.dateFacture||'',f.fournisseur||'',f.designation||'',f.montant||0,f.echeance||'',jours,f.montantPaye||0,f.statut||'',f.note||'']);
     });
     const ws = XLSX.utils.aoa_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, 'Factures urgentes');
@@ -3472,19 +3523,13 @@ async function exportFrsApayerByMonth() {
       return;
     }
 
-    // Filtrer : mois sélectionné + non payées + non archivées
-    let filtered = list.filter(f =>
-      !f.archived &&
-      f.statut !== 'payé' &&
-      (f.dateFacture||'').startsWith(filtreMois)
-    );
+    const filtered = applyFrsFilters(list, filtreMois, 'apayer');
 
     if (!filtered.length) {
       toast('Aucune facture "à payer" pour ce mois', 'info');
       return;
     }
 
-    // Créer Excel
     const wb = XLSX.utils.book_new();
     const rows = [['Date','Fournisseur','Désignation','Montant','Échéance','Jours restants','Statut','Observations']];
     const now = Date.now();
@@ -3496,16 +3541,7 @@ async function exportFrsApayerByMonth() {
         const jours = Math.ceil((ts - now) / 86400000);
         joursTexte = jours < 0 ? 'Expiré' : jours === 0 ? 'Aujourd\'hui' : jours + 'j';
       }
-      rows.push([
-        f.dateFacture||'',
-        f.fournisseur||'',
-        f.designation||'',
-        f.montant||0,
-        f.echeance||'',
-        joursTexte,
-        f.statut||'',
-        f.note||''
-      ]);
+      rows.push([f.dateFacture||'',f.fournisseur||'',f.designation||'',f.montant||0,f.echeance||'',joursTexte,f.statut||'',f.note||'']);
     });
 
     const ws = XLSX.utils.aoa_to_sheet(rows);

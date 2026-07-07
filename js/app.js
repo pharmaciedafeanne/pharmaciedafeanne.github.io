@@ -3188,7 +3188,10 @@ async function renderFournisseurs() {
     const now  = Date.now();
     const limit72 = now + 72 * 3600 * 1000;
 
-    // Remplir le select des mois
+    // Remplir le select des mois (préserver la valeur actuelle)
+    const selectMois = document.getElementById('frs-filter-month');
+    const moisActuel = selectMois ? selectMois.value : '';
+
     const moisUniques = new Set();
     activeList.forEach(f => {
       if (f.dateFacture) {
@@ -3196,11 +3199,13 @@ async function renderFournisseurs() {
         moisUniques.add(mois);
       }
     });
-    const selectMois = document.getElementById('frs-filter-month');
+
     if (selectMois) {
       const moisArray = Array.from(moisUniques).sort().reverse();
       selectMois.innerHTML = '<option value="">Tous les mois</option>' +
         moisArray.map(m => `<option value="${m}">${m}</option>`).join('');
+      // Restaurer la valeur précédemment sélectionnée
+      selectMois.value = moisActuel;
     }
 
     // Alertes 72h ou selon alerteJours custom

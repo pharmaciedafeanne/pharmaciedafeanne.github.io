@@ -3234,11 +3234,19 @@ async function renderFournisseurs() {
 
     // Filtre par mois
     const filtreMois = (document.getElementById('frs-filter-month') || {}).value || '';
-    let filtered = filtreMois ? activeList.filter(f => (f.dateFacture||'').startsWith(filtreMois)) : activeList;
 
-    // Filtre par statut
-    if (_frsStatutFilter === 'apayer') filtered = filtered.filter(f => f.statut !== 'payé');
-    else if (_frsStatutFilter === 'payees') filtered = filtered.filter(f => f.statut === 'payé');
+    // Filtre par statut - différent selon le statut choisi
+    let filtered;
+    if (_frsStatutFilter === 'payees') {
+      // "Payées" : inclure les archives (car factures payées = archivées)
+      filtered = filtreMois ? list.filter(f => f.statut === 'payé' && (f.dateFacture||'').startsWith(filtreMois)) : list.filter(f => f.statut === 'payé');
+    } else if (_frsStatutFilter === 'apayer') {
+      // "À payer" : exclure les payées (donc exclure archives)
+      filtered = filtreMois ? activeList.filter(f => f.statut !== 'payé' && (f.dateFacture||'').startsWith(filtreMois)) : activeList.filter(f => f.statut !== 'payé');
+    } else {
+      // "Toutes" : exclure les archives par défaut
+      filtered = filtreMois ? activeList.filter(f => (f.dateFacture||'').startsWith(filtreMois)) : activeList;
+    }
 
     if (!filtered.length) {
       tableBody.innerHTML = `<tr><td colspan="8"><div class="empty-state">

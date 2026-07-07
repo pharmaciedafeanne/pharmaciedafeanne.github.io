@@ -3165,6 +3165,7 @@ function toggleProspect(cb) {
 // ══════════════════════════════════════════════════════════════
 
 let _frsStatutFilter = 'all'; // 'all' | 'apayer' | 'payees'
+let _frsShowOnlyUrgent = false;
 
 // Fonction réutilisable pour filtrer les factures
 function applyFrsFilters(list, mois, statut, options = {}) {
@@ -3185,10 +3186,20 @@ function applyFrsFilters(list, mois, statut, options = {}) {
 
 function setFrsFilter(f) {
   _frsStatutFilter = f;
+  _frsShowOnlyUrgent = false;
   ['all','apayer','payees'].forEach(k => {
     const el = document.getElementById('frs-tab-' + k);
     if (el) el.classList.toggle('active', k === f);
   });
+  const btnUrgent = document.getElementById('frs-btn-urgent');
+  if (btnUrgent) btnUrgent.style.fontWeight = '400';
+  renderFournisseurs();
+}
+
+function filterFrsUrgent() {
+  _frsShowOnlyUrgent = !_frsShowOnlyUrgent;
+  const btnUrgent = document.getElementById('frs-btn-urgent');
+  if (btnUrgent) btnUrgent.style.fontWeight = _frsShowOnlyUrgent ? '700' : '400';
   renderFournisseurs();
 }
 
@@ -3270,6 +3281,11 @@ async function renderFournisseurs() {
       filtered = filtreMois ? activeList.filter(f => (f.dateFacture||'').startsWith(filtreMois)) : activeList;
     }
 
+    // Filtre par urgence (échéance <72h)
+    if (_frsShowOnlyUrgent) {
+      filtered = filtered.filter(f => alerts.some(a => a.id === f.id));
+    }
+
     if (!filtered.length) {
       tableBody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
         <div class="empty-icon">🏭</div><h3>Aucune facture</h3>
@@ -3301,7 +3317,7 @@ async function renderFournisseurs() {
         <td class="amount">${fmtA(f.montant)}</td>
         <td>${esc(f.echeance||'—')}</td>
         <td>${joursTexte}</td>
-        <td class="amount" style="color:var(--success)">${fmtA(f.montantPaye||0)}</td>
+        <td><div style="font-size:13px;font-weight:500">${fmtA(f.montantPaye||0)}</div><div style="font-size:11px;color:var(--text-muted)">${esc(f.datePaye||'—')}</div></td>
         <td>
           <select class="filter-select" style="padding:3px 6px;font-size:12px" onchange="quickChangeStatutFacture('${f.id}', this.value)">
             <option value="non payé" ${(f.statut||'non payé')==='non payé'?'selected':''}>Non payé</option>

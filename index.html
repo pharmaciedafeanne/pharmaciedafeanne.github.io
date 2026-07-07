@@ -492,7 +492,7 @@
       <div id="view-fournisseurs" class="hidden">
         <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
           <div class="frs-stat-card"><div id="frs-stat-total" class="frs-stat-val">0</div><div>Factures totales</div></div>
-          <div class="frs-stat-card" style="border-color:var(--danger)"><div id="frs-stat-due" class="frs-stat-val" style="color:var(--danger)">0</div><div>Échéances &lt;72h</div></div>
+          <div class="frs-stat-card" style="border-color:var(--danger);cursor:pointer;transition:all .2s" onclick="filterFrsUrgent()" id="frs-btn-urgent"><div id="frs-stat-due" class="frs-stat-val" style="color:var(--danger)">0</div><div>Échéances &lt;72h</div></div>
           <div class="frs-stat-card" style="border-color:var(--warning)"><div id="frs-stat-encours" class="frs-stat-val" style="color:var(--warning)">0</div><div>En cours</div></div>
           <div class="frs-stat-card" style="border-color:var(--success)"><div id="frs-stat-paye" class="frs-stat-val" style="color:var(--success)">0</div><div>Payées</div></div>
         </div>

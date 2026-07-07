@@ -19,6 +19,10 @@ function initApp() {
     return;
   }
 
+  // S'assurer que l'app reste cachée jusqu'à l'authentification
+  const appEl = document.getElementById('app');
+  if (appEl) appEl.classList.add('hidden');
+
   onAuthReady((status, user) => {
     if (status === 'logged_in') {
       showMainApp(user);

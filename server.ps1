@@ -1,9 +1,10 @@
-$root = $PSScriptRoot
+$root = "C:\Users\ELITEBOOK\Documents\GitHub\github pharmacie dafeanne"
 $port = 3000
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$port/")
 $listener.Start()
 Write-Host "Serveur demarré sur http://localhost:$port" -ForegroundColor Green
+Write-Host "Root: $root" -ForegroundColor Cyan
 Write-Host "Appuyez Ctrl+C pour arreter" -ForegroundColor Yellow
 
 $mimeTypes = @{

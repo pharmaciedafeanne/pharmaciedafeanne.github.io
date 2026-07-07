@@ -325,7 +325,7 @@ async function renderQuinzaines() {
       const T  = p.totaux || {};
       const df = T.dafeanne || {}; const dp = T.depot || {};
       const entite = p.entite || 'INAM';
-      const ef = entite.toLowerCase();
+      const ef = (typeof entite === 'string' ? entite : 'INAM').toLowerCase();
       const color = entite === 'INAM' ? 'var(--primary)' : 'var(--success)';
       const qBadge = `<span class="badge badge-${p.quinzaine==='Q1'?'q1':'q2'}">${p.quinzaine==='Q1'?'1ère Q.':'2ème Q.'}</span>`;
       const eBadge = `<span class="badge" style="background:${color};color:white;margin-left:4px">${entite}</span>`;
@@ -501,14 +501,14 @@ async function renderDetail(key) {
   lotsEl.innerHTML = period.lots.map(lot => {
     const lt = lot.totaux || {}; const ld = lt.dafeanne||{}; const lp = lt.depot||{};
     const entite = lot.entite || null; // null = ancien format multi-entités
-    const dfVal = entite ? (ld[entite.toLowerCase()]||0) : ((ld.inam||0)+(ld.amu||0));
-    const dpVal = entite ? (lp[entite.toLowerCase()]||0) : ((lp.inam||0)+(lp.amu||0));
+    const dfVal = entite && typeof entite === 'string' ? (ld[entite.toLowerCase()]||0) : (entite ? 0 : ((ld.inam||0)+(ld.amu||0)));
+    const dpVal = entite && typeof entite === 'string' ? (lp[entite.toLowerCase()]||0) : (entite ? 0 : ((lp.inam||0)+(lp.amu||0)));
     const lotTotal = dfVal + dpVal;
     const entiteBadge = entite
       ? `<span class="badge badge-${entite==='INAM'?'q1':'q2'}" style="margin-left:8px">${entite}</span>` : '';
 
     const bonRows = (lot.bons||[]).map(bon => {
-      if (entite) {
+      if (entite && typeof entite === 'string') {
         const e = entite.toLowerCase();
         const dfB = (bon.dafeanne&&bon.dafeanne[e])||0;
         const dpB = (bon.depot&&bon.depot[e])||0;
@@ -797,7 +797,7 @@ async function openEditBon(periodKey, lotNum, bonId) {
   if (!bon) return;
 
   const entite = lot.entite || null;
-  const e = entite ? entite.toLowerCase() : null;
+  const e = entite && typeof entite === 'string' ? entite.toLowerCase() : null;
 
   document.getElementById('eb-label').textContent = `${bon.label||'BON N°'+bon.numero} — LOT N°${lotNum}${entite?' ('+entite+')':''}`;
 
@@ -1425,7 +1425,7 @@ function renderLotCard(lot, isFull) {
 }
 
 function bonRow(lotNum, bon, entite) {
-  const e = (entite || 'inam').toLowerCase();
+  const e = (typeof entite === 'string' ? entite : 'inam').toLowerCase();
   const dfVal = (bon.dafeanne && bon.dafeanne[e]) || 0;
   const dpVal = (bon.depot    && bon.depot[e])    || 0;
   return `<tr id="row-${esc(bon.id)}">
@@ -1769,7 +1769,7 @@ function updateLotSubtotal(lotNum) {
       return;
     }
 
-    const e = lot.entite.toLowerCase();
+    const e = (typeof lot.entite === 'string' ? lot.entite : 'inam').toLowerCase();
     let dfVal = 0, dpVal = 0;
 
     // Calculer les sous-totaux

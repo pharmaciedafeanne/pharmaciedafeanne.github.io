@@ -4010,6 +4010,321 @@ async function check72hNotifications() {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  ASSURANCES INAM AMU
+// ══════════════════════════════════════════════════════════════
+
+async function renderAssurances() {
+  try {
+    const year = document.getElementById('ass-year')?.value;
+    const month = document.getElementById('ass-month')?.value;
+    const period = document.getElementById('ass-period')?.value;
+
+    if (!year || !month || !period) {
+      document.getElementById('assurance-lots-container').innerHTML =
+        '<div style="text-align:center;padding:40px;color:var(--text-muted)">Sélectionnez année, mois et quinzaine</div>';
+      return;
+    }
+
+    const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+      .collection('assurances').doc(key);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      document.getElementById('assurance-lots-container').innerHTML =
+        '<div style="text-align:center;padding:40px;color:var(--text-muted)">Aucune saisie. Cliquez sur "Nouveau lot" pour commencer.</div>';
+      return;
+    }
+
+    const data = doc.data();
+    const lots = data.lots || [];
+
+    const html = lots.map(lot => `
+      <div class="card" style="margin-bottom:16px;border-left:3px solid var(--primary)">
+        <div class="card-header">
+          <span>LOT N°${lot.numero}</span>
+          <button class="btn btn-outline btn-sm" onclick="addAssuranceBon(${lot.numero})">➕ Ajouter bon</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>BON</th>
+                <th>Date</th>
+                <th class="amount">INAM DAFEANNE</th>
+                <th class="amount">INAM DÉPÔT</th>
+                <th class="amount">AMU DAFEANNE</th>
+                <th class="amount">AMU DÉPÔT</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ass-bon-rows-${lot.numero}">
+              ${(lot.bons || []).map(bon => `
+                <tr>
+                  <td>${bon.numero}</td>
+                  <td><input type="date" value="${bon.date || ''}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'date', this.value)"></td>
+                  <td class="amount"><input type="number" value="${bon.inamDf || 0}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'inamDf', this.value)" style="width:80px"></td>
+                  <td class="amount"><input type="number" value="${bon.inamDp || 0}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'inamDp', this.value)" style="width:80px"></td>
+                  <td class="amount"><input type="number" value="${bon.amuDf || 0}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'amuDf', this.value)" style="width:80px"></td>
+                  <td class="amount"><input type="number" value="${bon.amuDp || 0}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'amuDp', this.value)" style="width:80px"></td>
+                  <td><button class="btn btn-danger btn-sm" onclick="deleteAssuranceBon(${lot.numero}, '${bon.id}')">🗑️</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="padding:12px;background:var(--primary)08;border-top:1px solid var(--border);font-weight:600;display:flex;justify-content:space-around;font-size:13px">
+          <div>INAM-DF: <strong id="ass-sub-inamdf-${lot.numero}">0</strong> F</div>
+          <div>INAM-DP: <strong id="ass-sub-inamdp-${lot.numero}">0</strong> F</div>
+          <div>AMU-DF: <strong id="ass-sub-amudf-${lot.numero}">0</strong> F</div>
+          <div>AMU-DP: <strong id="ass-sub-amudp-${lot.numero}">0</strong> F</div>
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('assurance-lots-container').innerHTML = html;
+    updateAssuranceTotal();
+
+    // Calculer les sous-totaux
+    lots.forEach(lot => updateAssuranceSubtotal(lot.numero));
+
+  } catch (e) {
+    Logger.error('Erreur renderAssurances', { error: e.message });
+    toast('Erreur: ' + e.message, 'error');
+  }
+}
+
+function addAssuranceLot() {
+  const year = document.getElementById('ass-year')?.value;
+  const month = document.getElementById('ass-month')?.value;
+  const period = document.getElementById('ass-period')?.value;
+
+  if (!year || !month || !period) {
+    toast('Sélectionnez année, mois et quinzaine', 'error');
+    return;
+  }
+
+  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    .collection('assurances').doc(key);
+
+  docRef.get().then(doc => {
+    const data = doc.exists ? doc.data() : { lots: [] };
+    const lots = data.lots || [];
+    const numero = lots.length + 1;
+
+    const newLot = {
+      numero,
+      bons: [{
+        id: `bon_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+        numero: 1,
+        date: new Date().toISOString().split('T')[0],
+        inamDf: 0,
+        inamDp: 0,
+        amuDf: 0,
+        amuDp: 0
+      }]
+    };
+
+    lots.push(newLot);
+    docRef.set({ lots, year, month, period, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+      .then(() => {
+        Logger.info('Lot ajouté', { numero });
+        renderAssurances();
+      })
+      .catch(e => {
+        Logger.error('Erreur addLot', { error: e.message });
+        toast('Erreur: ' + e.message, 'error');
+      });
+  });
+}
+
+function addAssuranceBon(lotNum) {
+  const year = document.getElementById('ass-year')?.value;
+  const month = document.getElementById('ass-month')?.value;
+  const period = document.getElementById('ass-period')?.value;
+
+  if (!year || !month || !period) return;
+
+  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    .collection('assurances').doc(key);
+
+  docRef.get().then(doc => {
+    const data = doc.data();
+    const lots = data.lots || [];
+    const lot = lots.find(l => l.numero === lotNum);
+
+    if (lot && lot.bons.length < 10) {
+      const bonNum = lot.bons.length + 1;
+      lot.bons.push({
+        id: `bon_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+        numero: bonNum,
+        date: new Date().toISOString().split('T')[0],
+        inamDf: 0,
+        inamDp: 0,
+        amuDf: 0,
+        amuDp: 0
+      });
+
+      docRef.update({ lots, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        .then(() => renderAssurances())
+        .catch(e => toast('Erreur: ' + e.message, 'error'));
+    }
+  });
+}
+
+function updateAssuranceBon(lotNum, bonId, field, value) {
+  const year = document.getElementById('ass-year')?.value;
+  const month = document.getElementById('ass-month')?.value;
+  const period = document.getElementById('ass-period')?.value;
+
+  if (!year || !month || !period) return;
+
+  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    .collection('assurances').doc(key);
+
+  docRef.get().then(doc => {
+    const data = doc.data();
+    const lots = data.lots || [];
+    const lot = lots.find(l => l.numero === lotNum);
+    const bon = lot?.bons.find(b => b.id === bonId);
+
+    if (bon) {
+      bon[field] = field.startsWith('inam') || field.startsWith('amu') ? parseInt(value) || 0 : value;
+      docRef.update({ lots, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        .then(() => {
+          updateAssuranceSubtotal(lotNum);
+          updateAssuranceTotal();
+        })
+        .catch(e => toast('Erreur: ' + e.message, 'error'));
+    }
+  });
+}
+
+function deleteAssuranceBon(lotNum, bonId) {
+  if (!confirm('Supprimer ce bon?')) return;
+
+  const year = document.getElementById('ass-year')?.value;
+  const month = document.getElementById('ass-month')?.value;
+  const period = document.getElementById('ass-period')?.value;
+
+  if (!year || !month || !period) return;
+
+  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    .collection('assurances').doc(key);
+
+  docRef.get().then(doc => {
+    const data = doc.data();
+    const lots = data.lots || [];
+    const lot = lots.find(l => l.numero === lotNum);
+
+    if (lot) {
+      lot.bons = lot.bons.filter(b => b.id !== bonId);
+      lot.bons.forEach((b, i) => b.numero = i + 1);
+
+      docRef.update({ lots, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        .then(() => renderAssurances())
+        .catch(e => toast('Erreur: ' + e.message, 'error'));
+    }
+  });
+}
+
+function updateAssuranceSubtotal(lotNum) {
+  const year = document.getElementById('ass-year')?.value;
+  const month = document.getElementById('ass-month')?.value;
+  const period = document.getElementById('ass-period')?.value;
+
+  if (!year || !month || !period) return;
+
+  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    .collection('assurances').doc(key);
+
+  docRef.get().then(doc => {
+    const data = doc.data();
+    const lots = data.lots || [];
+    const lot = lots.find(l => l.numero === lotNum);
+
+    if (lot) {
+      const totals = { inamDf: 0, inamDp: 0, amuDf: 0, amuDp: 0 };
+      (lot.bons || []).forEach(bon => {
+        totals.inamDf += bon.inamDf || 0;
+        totals.inamDp += bon.inamDp || 0;
+        totals.amuDf += bon.amuDf || 0;
+        totals.amuDp += bon.amuDp || 0;
+      });
+
+      document.getElementById(`ass-sub-inamdf-${lotNum}`)?.textContent = fmtA(totals.inamDf);
+      document.getElementById(`ass-sub-inamdp-${lotNum}`)?.textContent = fmtA(totals.inamDp);
+      document.getElementById(`ass-sub-amudf-${lotNum}`)?.textContent = fmtA(totals.amuDf);
+      document.getElementById(`ass-sub-amudp-${lotNum}`)?.textContent = fmtA(totals.amuDp);
+    }
+  });
+}
+
+function updateAssuranceTotal() {
+  const year = document.getElementById('ass-year')?.value;
+  const month = document.getElementById('ass-month')?.value;
+  const period = document.getElementById('ass-period')?.value;
+
+  if (!year || !month || !period) return;
+
+  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    .collection('assurances').doc(key);
+
+  docRef.get().then(doc => {
+    const data = doc.data();
+    const lots = data.lots || [];
+
+    const totals = { inamDf: 0, inamDp: 0, amuDf: 0, amuDp: 0 };
+    lots.forEach(lot => {
+      (lot.bons || []).forEach(bon => {
+        totals.inamDf += bon.inamDf || 0;
+        totals.inamDp += bon.inamDp || 0;
+        totals.amuDf += bon.amuDf || 0;
+        totals.amuDp += bon.amuDp || 0;
+      });
+    });
+
+    document.getElementById('ass-total-inam-df')?.textContent = fmtA(totals.inamDf);
+    document.getElementById('ass-total-inam-dp')?.textContent = fmtA(totals.inamDp);
+    document.getElementById('ass-total-amu-df')?.textContent = fmtA(totals.amuDf);
+    document.getElementById('ass-total-amu-dp')?.textContent = fmtA(totals.amuDp);
+  });
+}
+
+function closeAssuranceQuinzaine() {
+  const year = document.getElementById('ass-year')?.value;
+  const month = document.getElementById('ass-month')?.value;
+  const period = document.getElementById('ass-period')?.value;
+
+  if (!year || !month || !period) {
+    toast('Sélectionnez une quinzaine', 'error');
+    return;
+  }
+
+  if (!confirm(`Clôturer ${period} ${MOIS_APP[month]} ${year}? Les saisies ne seront plus modifiables.`)) return;
+
+  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    .collection('assurances').doc(key);
+
+  docRef.update({ closed: true, closedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .then(() => {
+      toast('Quinzaine clôturée ✓', 'success');
+      renderAssurances();
+    })
+    .catch(e => {
+      Logger.error('Erreur closeAssurance', { error: e.message });
+      toast('Erreur: ' + e.message, 'error');
+    });
+}
+
+// ══════════════════════════════════════════════════════════════
 //  BOOT
 // ══════════════════════════════════════════════════════════════
 

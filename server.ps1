@@ -27,10 +27,21 @@ while ($listener.IsListening) {
 
     $filePath = Join-Path $root $urlPath.TrimStart('/')
 
+    # DÉSACTIVER LE CACHE - FICHIERS FRAIS À CHAQUE REQUÊTE
+    $res.AddHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+    $res.AddHeader("Pragma", "no-cache")
+    $res.AddHeader("Expires", "0")
+
     if (Test-Path $filePath -PathType Leaf) {
       $ext = [System.IO.Path]::GetExtension($filePath)
       $mime = if ($mimeTypes[$ext]) { $mimeTypes[$ext] } else { 'application/octet-stream' }
       $bytes = [System.IO.File]::ReadAllBytes($filePath)
+
+      # DEBUG: Log pour vérifier le chemin et la taille
+      if ($urlPath -like "*/app.js") {
+        Write-Host "📄 Serving app.js from: $filePath ($(($bytes | Measure-Object -Property Length).Sum) bytes)" -ForegroundColor Cyan
+      }
+
       $res.ContentType = $mime
       $res.ContentLength64 = $bytes.Length
       $res.OutputStream.Write($bytes, 0, $bytes.Length)

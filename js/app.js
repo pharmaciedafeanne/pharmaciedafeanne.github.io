@@ -875,6 +875,11 @@ async function openEditBon(periodKey, lotNum, bonId) {
 
 function setSaisieEntite(entite) {
   try {
+    // IMPORTANT: S'assurer que entite est une string
+    if (typeof entite !== 'string') {
+      entite = String(entite);
+    }
+
     // Valider entité
     const validEntities = [ENTITY.INAM, ENTITY.AMU];
     if (!validEntities.includes(entite)) {
@@ -1017,11 +1022,16 @@ function openBisSaisie(parentKey, entite, year, month, quinzaine) {
 }
 
 function addLot() {
-  const entite = AppState.get('saisie.entite');
+  let entite = AppState.get('saisie.entite');
   if (!entite) {
     Logger.warn('Tentative ajout lot sans entité', { entite });
     toast('Choisissez d\'abord l\'entité (INAM ou AMU) avant d\'ajouter un lot.', 'error');
     return;
+  }
+
+  // IMPORTANT: S'assurer que entite est une string (pas un objet)
+  if (typeof entite !== 'string') {
+    entite = String(entite);
   }
 
   const lots = AppState.get('saisie.lots');
@@ -1274,6 +1284,14 @@ function renderDetailEditLotsBuilder() {
       return;
     }
 
+    // IMPORTANT: S'assurer que chaque lot a son entité définie
+    lots.forEach(lot => {
+      if (!lot.entite || typeof lot.entite !== 'string') {
+        lot.entite = entite;
+      }
+    });
+    AppState.set('saisie.lots', lots);
+
     // === ÉTAPE 1: Bandeau modification ===
     const entiteColor = entite === ENTITY.INAM ? 'var(--primary)' : 'var(--success)';
     const entiteIcon = entite === ENTITY.INAM ? '🏥' : '💊';
@@ -1303,9 +1321,11 @@ function renderDetailEditLotsBuilder() {
 
     // === ÉTAPE 3.5: Total global ===
     html += `<div style="padding:16px;margin-top:16px;background:var(--primary)15;border:2px solid var(--primary);border-radius:8px">
-      <div style="display:flex;align-items:baseline;gap:12px">
-        <span style="font-weight:600;color:var(--primary);font-size:14px">TOTAL GLOBAL ${entite}:</span>
-        <span style="font-size:20px;font-weight:700;color:var(--primary)" id="total-global-edit">0 F</span>
+      <div style="font-weight:600;color:var(--primary);font-size:14px;margin-bottom:8px">TOTAL GLOBAL ${entite}</div>
+      <div style="display:flex;justify-content:space-between;gap:20px;font-size:16px">
+        <div>💊 DAFEANNE: <strong style="color:var(--primary);font-size:18px" id="total-global-dafeanne">0</strong> F</div>
+        <div>🏪 DÉPÔT: <strong style="color:var(--primary);font-size:18px" id="total-global-depot">0</strong> F</div>
+        <div style="border-left:2px solid var(--primary);padding-left:20px">TOTAL: <strong style="color:var(--primary);font-size:20px" id="total-global-edit">0</strong> F</div>
       </div>
     </div>`;
 
@@ -1317,13 +1337,14 @@ function renderDetailEditLotsBuilder() {
 
     c.innerHTML = html;
 
-    // Recalculer les sous-totaux
-    lots.forEach(l => {
-      if (l.entite) updateLotSubtotal(l.numero);
-    });
-
-    // Mettre à jour le total global
-    updateGlobalTotal();
+    // Recalculer les sous-totaux avec délai pour s'assurer que le DOM est prêt
+    setTimeout(() => {
+      lots.forEach(l => {
+        updateLotSubtotal(l.numero);
+      });
+      updateGlobalTotal();
+      Logger.debug('renderDetailEditLotsBuilder: sous-totaux recalculés', { nbLots: lots.length });
+    }, 50);
 
     Logger.debug('renderDetailEditLotsBuilder: rendu complété', { nbLots: lots.length, entite, key: editingKey });
 
@@ -1335,6 +1356,13 @@ function renderDetailEditLotsBuilder() {
 
 function renderLotsBuilder() {
   try {
+    // Nettoyer le bandeau BIS si mode BIS inactif
+    const bisMode = AppState.get('bisMode');
+    const banner = document.getElementById('bis-mode-banner');
+    if (banner && bisMode && !bisMode.active) {
+      banner.innerHTML = '';
+    }
+
     const c = document.getElementById('lots-builder');
     if (!c) {
       Logger.warn('Container #lots-builder non trouvé');
@@ -1343,6 +1371,14 @@ function renderLotsBuilder() {
 
     const entite = AppState.get('saisie.entite');
     const lots = AppState.get('saisie.lots') || [];
+
+    // IMPORTANT: S'assurer que chaque lot a son entité définie (sinon [object Object])
+    lots.forEach(lot => {
+      if (!lot.entite || typeof lot.entite !== 'string') {
+        lot.entite = entite;
+      }
+    });
+    AppState.set('saisie.lots', lots);
 
     let html = '';
 
@@ -1391,18 +1427,24 @@ function renderLotsBuilder() {
 
     // === ÉTAPE 5: Total global ===
     html += `<div style="padding:16px;margin-top:16px;background:var(--primary)15;border:2px solid var(--primary);border-radius:8px">
-      <div style="display:flex;align-items:baseline;gap:12px">
-        <span style="font-weight:600;color:var(--primary);font-size:14px">TOTAL GLOBAL ${entite}:</span>
-        <span style="font-size:20px;font-weight:700;color:var(--primary)" id="total-global-edit">0 F</span>
+      <div style="font-weight:600;color:var(--primary);font-size:14px;margin-bottom:8px">TOTAL GLOBAL ${entite}</div>
+      <div style="display:flex;justify-content:space-between;gap:20px;font-size:16px">
+        <div>💊 DAFEANNE: <strong style="color:var(--primary);font-size:18px" id="total-global-dafeanne">0</strong> F</div>
+        <div>🏪 DÉPÔT: <strong style="color:var(--primary);font-size:18px" id="total-global-depot">0</strong> F</div>
+        <div style="border-left:2px solid var(--primary);padding-left:20px">TOTAL: <strong style="color:var(--primary);font-size:20px" id="total-global-edit">0</strong> F</div>
       </div>
     </div>`;
 
     c.innerHTML = html;
 
-    // Recalculer les sous-totaux
-    lots.forEach(lot => {
-      if (lot.entite) updateLotSubtotal(lot.numero);
-    });
+    // Recalculer les sous-totaux avec délai pour s'assurer que le DOM est prêt
+    setTimeout(() => {
+      lots.forEach(lot => {
+        updateLotSubtotal(lot.numero);
+      });
+      updateGlobalTotal();
+      Logger.debug('renderLotsBuilder: sous-totaux recalculés', { nbLots: lots.length });
+    }, 50);
 
     Logger.debug('renderLotsBuilder: rendu complété', { nbLots: lots.length, entite });
 
@@ -1799,19 +1841,28 @@ function updateLotSubtotal(lotNum) {
     const lots = AppState.get('saisie.lots');
     const lot = lots.find(l => l.numero === lotNum);
 
-    if (!lot || !lot.entite || typeof lot.entite !== 'string') {
-      Logger.debug('Lot non trouvé ou sans entité valide pour updateLotSubtotal', { lotNum, lotEntite: lot?.entite, lotEntiteType: typeof lot?.entite });
+    if (!lot) {
+      Logger.debug('Lot non trouvé pour updateLotSubtotal', { lotNum });
       return;
     }
 
-    const e = (typeof lot.entite === 'string' ? lot.entite : 'inam').toLowerCase();
+    // IMPORTANT: S'assurer que lot.entite est une string
+    let entiteStr = lot.entite;
+    if (!entiteStr || typeof entiteStr !== 'string') {
+      entiteStr = AppState.get('saisie.entite') || 'inam';
+      lot.entite = entiteStr;
+    }
+
+    const e = entiteStr.toLowerCase();
     let dfVal = 0, dpVal = 0;
 
     // Calculer les sous-totaux
-    lot.bons.forEach(b => {
-      dfVal += (b.dafeanne && b.dafeanne[e]) || 0;
-      dpVal += (b.depot && b.depot[e]) || 0;
-    });
+    if (lot.bons && Array.isArray(lot.bons)) {
+      lot.bons.forEach(b => {
+        dfVal += (b.dafeanne && b.dafeanne[e]) || 0;
+        dpVal += (b.depot && b.depot[e]) || 0;
+      });
+    }
 
     const total = dfVal + dpVal;
 
@@ -1826,7 +1877,7 @@ function updateLotSubtotal(lotNum) {
     updateElement(`st-${lotNum}-dp`, dpVal);
     updateElement(`st-${lotNum}-total`, total);
 
-    Logger.debug('Sous-totaux lot mis à jour', { lotNum, dafeanne: dfVal, depot: dpVal, total });
+    Logger.debug('Sous-totaux lot mis à jour', { lotNum, entite: e, dafeanne: dfVal, depot: dpVal, total });
 
   } catch (e) {
     Logger.error('Erreur updateLotSubtotal', { lotNum, error: e.message });
@@ -1841,23 +1892,30 @@ function updateGlobalTotal() {
     if (!entite) return;
 
     const e = entite.toLowerCase();
-    let total = 0;
+    let dfTotal = 0, dpTotal = 0;
 
-    // Calculer le total global
+    // Calculer les totaux DAFEANNE et DÉPÔT
     lots.forEach(lot => {
       if (lot.bons) {
         lot.bons.forEach(b => {
-          total += (b.dafeanne && b.dafeanne[e]) || 0;
-          total += (b.depot && b.depot[e]) || 0;
+          dfTotal += (b.dafeanne && b.dafeanne[e]) || 0;
+          dpTotal += (b.depot && b.depot[e]) || 0;
         });
       }
     });
 
-    // Mettre à jour le DOM
-    const el = document.getElementById('total-global-edit');
-    if (el) el.textContent = fmtA(total) + ' F';
+    const total = dfTotal + dpTotal;
 
-    Logger.debug('Total global mis à jour', { entite, total });
+    // Mettre à jour les éléments DOM (DAFEANNE, DÉPÔT, TOTAL)
+    const dfEl = document.getElementById('total-global-dafeanne');
+    const dpEl = document.getElementById('total-global-depot');
+    const totalEl = document.getElementById('total-global-edit');
+
+    if (dfEl) dfEl.textContent = fmtA(dfTotal);
+    if (dpEl) dpEl.textContent = fmtA(dpTotal);
+    if (totalEl) totalEl.textContent = fmtA(total);
+
+    Logger.debug('Total global mis à jour', { entite, dafeanne: dfTotal, depot: dpTotal, total });
 
   } catch (e) {
     Logger.error('Erreur updateGlobalTotal', { error: e.message });
@@ -1895,38 +1953,44 @@ function removeLot(num) {
 
 async function saveNouvelle() {
   try {
-    // 1. Récupérer et valider les champs période
-    const year = parseInt(document.getElementById('new-year').value);
-    const month = parseInt(document.getElementById('new-month').value);
-    const quinzaine = document.getElementById('new-quinzaine').value;
-
-    try {
-      Validation.requireNumber(year, 'Année', 2000, 2100);
-      Validation.requireNumber(month, 'Mois', 1, 12);
-      Validation.requireEnum(quinzaine, 'Quinzaine', [QUINZAINE.Q1, QUINZAINE.Q2]);
-    } catch (e) {
-      Logger.warn('Validation période échouée', { year, month, quinzaine, error: e.message });
-      toast(e.message, 'error');
-      return;
-    }
-
-    // 2. Vérifier qu'on a au moins un lot
-    const lots = AppState.get('saisie.lots');
-    if (!lots || !lots.length) {
-      Logger.warn('Tentative save sans lots');
-      toast('Ajoutez au least un lot', 'error');
-      return;
-    }
-
-    // 3. Vérifier qu'on a une entité
+    // Récupérer les valeurs
+    const year = parseInt(document.getElementById('new-year')?.value || '0');
+    const month = parseInt(document.getElementById('new-month')?.value || '0');
+    const quinzaine = (document.getElementById('new-quinzaine')?.value || '').trim();
     const entite = AppState.get('saisie.entite');
-    if (!entite || entite === 'null' || entite === '') {
-      Logger.warn('Entité manquante à la sauvegarde');
-      toast('Choisissez l\'entité (INAM ou AMU) avant d\'enregistrer', 'error');
+    const lots = AppState.get('saisie.lots') || [];
+
+    // Vérifier que tous les champs sont remplis
+    if (!year || year < 2000 || year > 2100 || !month || month < 1 || month > 12 || !quinzaine || !entite || !lots.length) {
+      const missing = [];
+      if (!year || year < 2000 || year > 2100) missing.push('Année');
+      if (!month || month < 1 || month > 12) missing.push('Mois');
+      if (!quinzaine) missing.push('Quinzaine');
+      if (!entite) missing.push('Entité');
+      if (!lots.length) missing.push('Au moins 1 lot');
+
+      Logger.warn('Champs manquants pour sauvegarde', { year, month, quinzaine, entite, nbLots: lots.length, missing });
+      toast(`Champs requis manquants: ${missing.join(', ')}`, 'error');
       return;
     }
 
-    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, nbLots: lots.length, entite });
+    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, entite, nbLots: lots.length });
+    for (const lot of lots) {
+      if (!lot.bons || lot.bons.length === 0) {
+        Logger.warn('Lot sans bons', { lotNum: lot.numero });
+        toast(`Lot N°${lot.numero} n'a pas de bons`, 'error');
+        return;
+      }
+      const hasValues = lot.bons.some(b =>
+        ((b.dafeanne?.inam || 0) + (b.dafeanne?.amu || 0) +
+         (b.depot?.inam || 0) + (b.depot?.amu || 0)) > 0
+      );
+      if (!hasValues) {
+        Logger.warn('Lot sans valeurs', { lotNum: lot.numero });
+        toast(`Lot N°${lot.numero} n'a pas de valeurs`, 'error');
+        return;
+      }
+    }
 
     const bisMode = AppState.get('bisMode');
 
@@ -1935,7 +1999,7 @@ async function saveNouvelle() {
       await saveNouvelleBis(bisMode, year, month, quinzaine, lots);
     } else {
       // === MODE NORMAL ===
-      await saveNouvelleNormal(year, month, quinzaine, lots);
+      await saveNouvelleNormal(year, month, quinzaine, lots, entite);
     }
 
     // Nettoyage et redirection
@@ -1981,9 +2045,8 @@ async function saveNouvelleBis(bisMode, year, month, quinzaine, lots) {
 }
 
 // Helper: Sauvegarder en mode NORMAL
-async function saveNouvelleNormal(year, month, quinzaine, lots) {
-  const entite = AppState.get('saisie.entite');
-
+async function saveNouvelleNormal(year, month, quinzaine, lots, entite) {
+  // Utiliser l'entité passée en paramètre (validation déjà faite dans saveNouvelle)
   if (!entite) {
     Logger.error('Entité manquante en mode normal');
     throw new Error('Choisissez l\'entité (INAM ou AMU) avant d\'enregistrer.');
@@ -2002,7 +2065,15 @@ async function saveNouvelleNormal(year, month, quinzaine, lots) {
     throw new Error(msg);
   }
 
-  await savePeriod({ year, month, quinzaine, entite, lots, brouillon: false });
+  // Sauvegarder avec les paramètres validés
+  await savePeriod({
+    year,
+    month,
+    quinzaine,
+    entite,
+    lots,
+    brouillon: false
+  });
   toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} enregistrée ✓`, 'success');
   logAction(`Nouvelle quinzaine ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name || '');
   Logger.info('Quinzaine enregistrée', { entite, quinzaine, year, month });

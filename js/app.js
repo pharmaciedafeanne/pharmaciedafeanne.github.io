@@ -198,7 +198,7 @@ function navigate(view, params = {}) {
   if (params.key) appState.detailKey = params.key;
   setActiveNav(view);
 
-  ['dashboard','quinzaines','detail','import','nouvelle','users','inam-amu','caisse','fournisseurs','catalogue-frs','journal','donnees'].forEach(v => {
+  ['dashboard','quinzaines','detail','import','nouvelle','users','assurances','inam-amu','caisse','fournisseurs','catalogue-frs','journal','donnees'].forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.classList.add('hidden');
   });
@@ -212,6 +212,7 @@ function navigate(view, params = {}) {
     import:       '📥 Import Excel',
     nouvelle:     '➕ Nouvelle Quinzaine',
     users:        '👥 Mon Équipe — Opérateurs',
+    assurances:   '🏥 Saisie Assurances INAM AMU',
     'inam-amu':   '🏥 Suivi Paiements INAM / AMU',
     caisse:       '💰 Petite Caisse',
     fournisseurs:    '🏭 Suivi Fournisseurs',
@@ -225,6 +226,7 @@ function navigate(view, params = {}) {
     detail:          () => renderDetail(appState.detailKey),
     import:          renderImportView,
     users:           renderUsers,
+    assurances:      renderAssurances,
     caisse:          renderCaisse,
     fournisseurs:    renderFournisseurs,
     'catalogue-frs': renderCatalogueFrs,

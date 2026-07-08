@@ -68,6 +68,7 @@
       <div class="nav-item" data-view="nouvelle"   onclick="navigate('nouvelle')"><span class="icon">➕</span> Nouvelle saisie</div>
 
       <div class="nav-section-label">Factures</div>
+      <div class="nav-item" data-view="assurances"  id="nav-assurances"  onclick="navigate('assurances')"><span class="icon">🏥</span> Assurances INAM AMU</div>
       <div class="nav-item" data-view="inam-amu"    id="nav-inam-amu"    onclick="navigate('inam-amu')"><span class="icon">🏥</span> Paiements INAM AMU</div>
       <div class="nav-item" data-view="caisse"      id="nav-caisse"      onclick="navigate('caisse')"><span class="icon">💰</span> Petite Caisse</div>
       <div class="nav-item" data-view="fournisseurs" id="nav-fournisseurs" onclick="navigate('fournisseurs')"><span class="icon">🏪</span> Fournisseurs</div>
@@ -255,6 +256,53 @@
               <thead><tr><th>Date</th><th>Type</th><th>Désignation / Source</th><th>Réf. transaction</th><th>Montant</th><th>Solde après</th><th>Obs.</th><th></th></tr></thead>
               <tbody id="caisse-tbody"></tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── ASSURANCES INAM AMU ────────────────────────── -->
+      <div id="view-assurances" class="hidden">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🏥 Saisie Assurances INAM AMU</span>
+            <div style="display:flex;gap:8px">
+              <select id="ass-period" onchange="renderAssurances()" class="filter-select">
+                <option value="">Sélectionner quinzaine...</option>
+                <option value="Q1">Q1 — 1ère quinzaine (1–15)</option>
+                <option value="Q2">Q2 — 2ème quinzaine (16–31)</option>
+              </select>
+              <select id="ass-year" onchange="renderAssurances()" class="filter-select">
+                <option value="">Année</option>
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
+                <option value="2027">2027</option>
+              </select>
+              <select id="ass-month" onchange="renderAssurances()" class="filter-select">
+                <option value="">Mois</option>
+                <option value="1">Janvier</option><option value="2">Février</option>
+                <option value="3">Mars</option><option value="4">Avril</option>
+                <option value="5">Mai</option><option value="6">Juin</option>
+                <option value="7">Juillet</option><option value="8">Août</option>
+                <option value="9">Septembre</option><option value="10">Octobre</option>
+                <option value="11">Novembre</option><option value="12">Décembre</option>
+              </select>
+              <button class="btn btn-primary" onclick="addAssuranceLot()">➕ Nouveau lot</button>
+              <button class="btn btn-success" onclick="closeAssuranceQuinzaine()">✓ Clôturer</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="assurance-lots-container" style="margin-top:16px"></div>
+
+        <div class="card" style="margin-top:16px;background:var(--primary)15">
+          <div style="padding:16px">
+            <div style="font-weight:600;color:var(--primary);margin-bottom:12px">TOTAL GÉNÉRAL</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;font-size:14px">
+              <div>💊 INAM DAFEANNE: <strong id="ass-total-inam-df">0</strong> F</div>
+              <div>💊 INAM DÉPÔT: <strong id="ass-total-inam-dp">0</strong> F</div>
+              <div>💙 AMU DAFEANNE: <strong id="ass-total-amu-df">0</strong> F</div>
+              <div>💙 AMU DÉPÔT: <strong id="ass-total-amu-dp">0</strong> F</div>
+            </div>
           </div>
         </div>
       </div>

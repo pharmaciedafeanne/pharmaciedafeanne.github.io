@@ -875,6 +875,11 @@ async function openEditBon(periodKey, lotNum, bonId) {
 
 function setSaisieEntite(entite) {
   try {
+    // IMPORTANT: S'assurer que entite est une string
+    if (typeof entite !== 'string') {
+      entite = String(entite);
+    }
+
     // Valider entité
     const validEntities = [ENTITY.INAM, ENTITY.AMU];
     if (!validEntities.includes(entite)) {
@@ -1017,11 +1022,16 @@ function openBisSaisie(parentKey, entite, year, month, quinzaine) {
 }
 
 function addLot() {
-  const entite = AppState.get('saisie.entite');
+  let entite = AppState.get('saisie.entite');
   if (!entite) {
     Logger.warn('Tentative ajout lot sans entité', { entite });
     toast('Choisissez d\'abord l\'entité (INAM ou AMU) avant d\'ajouter un lot.', 'error');
     return;
+  }
+
+  // IMPORTANT: S'assurer que entite est une string (pas un objet)
+  if (typeof entite !== 'string') {
+    entite = String(entite);
   }
 
   const lots = AppState.get('saisie.lots');

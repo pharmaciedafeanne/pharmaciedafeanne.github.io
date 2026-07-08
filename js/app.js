@@ -909,7 +909,7 @@ function renderNouvelle() {
     // Gérer le bandeau BIS
     const banner = document.getElementById('bis-mode-banner');
     if (banner) {
-      if (bisMode) {
+      if (bisMode && bisMode.active) {
         renderBisModeGallery(bisMode);
         lockFormFields(bisMode);
         AppState.set('saisie.entite', bisMode.entite);
@@ -1387,6 +1387,14 @@ function renderLotsBuilder() {
     // === ÉTAPE 4: Bouton ajouter lot (toujours visible) ===
     html += `<div style="padding:12px;margin-top:4px">
       <button class="btn btn-primary" style="width:100%;padding:12px;font-size:15px" onclick="addLot()">➕ Ajouter un lot</button>
+    </div>`;
+
+    // === ÉTAPE 5: Total global ===
+    html += `<div style="padding:16px;margin-top:16px;background:var(--primary)15;border:2px solid var(--primary);border-radius:8px">
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <span style="font-weight:600;color:var(--primary);font-size:14px">TOTAL GLOBAL ${entite}:</span>
+        <span style="font-size:20px;font-weight:700;color:var(--primary)" id="total-global-edit">0 F</span>
+      </div>
     </div>`;
 
     c.innerHTML = html;

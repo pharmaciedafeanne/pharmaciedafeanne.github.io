@@ -2010,9 +2010,6 @@ async function saveNouvelle() {
     }
 
     Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, nbLots: lots.length, entite });
-=======
-    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, entite, nbLots: lots.length });
->>>>>>> b198d8f4626db98d647518a2525367c62ce9b6c5
 
     const bisMode = AppState.get('bisMode');
 
@@ -2021,11 +2018,7 @@ async function saveNouvelle() {
       await saveNouvelleBis(bisMode, year, month, quinzaine, lots);
     } else {
       // === MODE NORMAL ===
-<<<<<<< HEAD
       await saveNouvelleNormal(year, month, quinzaine, lots, entite);
-=======
-      await savePeriod({ year, month, quinzaine, entite, lots, brouillon: false });
->>>>>>> b198d8f4626db98d647518a2525367c62ce9b6c5
     }
 
     // Nettoyage et redirection
@@ -2091,16 +2084,13 @@ async function saveNouvelleNormal(year, month, quinzaine, lots, entite) {
     throw new Error(msg);
   }
 
-  // Forcer la récupération fraîche de AppState pour la sauvegarde
-  const freshEntite = AppState.get('saisie.entite');
-  const freshLots = AppState.get('saisie.lots');
-
+  // Sauvegarder avec les paramètres validés
   await savePeriod({
     year,
     month,
     quinzaine,
-    entite: freshEntite,
-    lots: freshLots,
+    entite,
+    lots,
     brouillon: false
   });
   toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} enregistrée ✓`, 'success');

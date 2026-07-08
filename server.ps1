@@ -1,5 +1,5 @@
 $root = "C:\Users\ELITEBOOK\Documents\GitHub\github pharmacie dafeanne"
-$port = 8080
+$port = 8000
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$port/")
 $listener.Start()
@@ -36,6 +36,16 @@ while ($listener.IsListening) {
       $ext = [System.IO.Path]::GetExtension($filePath)
       $mime = if ($mimeTypes[$ext]) { $mimeTypes[$ext] } else { 'application/octet-stream' }
       $bytes = [System.IO.File]::ReadAllBytes($filePath)
+      $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+
+      # DEBUG: Check for Assurances in index.html
+      if ($urlPath -eq "/" -or $urlPath -eq "/index.html") {
+        if ($text -match "Assurances INAM AMU") {
+          Write-Host "✅ Found 'Assurances INAM AMU' in served HTML" -ForegroundColor Green
+        } else {
+          Write-Host "❌ NOT FOUND 'Assurances INAM AMU' in served HTML" -ForegroundColor Red
+        }
+      }
 
       # DEBUG: Log pour vérifier le chemin et la taille
       if ($urlPath -like "*/app.js") {

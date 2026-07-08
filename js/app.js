@@ -1335,6 +1335,13 @@ function renderDetailEditLotsBuilder() {
 
 function renderLotsBuilder() {
   try {
+    // Nettoyer le bandeau BIS si mode BIS inactif
+    const bisMode = AppState.get('bisMode');
+    const banner = document.getElementById('bis-mode-banner');
+    if (banner && bisMode && !bisMode.active) {
+      banner.innerHTML = '';
+    }
+
     const c = document.getElementById('lots-builder');
     if (!c) {
       Logger.warn('Container #lots-builder non trouvé');

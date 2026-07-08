@@ -115,10 +115,9 @@ const AppState = (() => {
       this.set('autosave.isDirty', false);
     },
 
-    addLot(entite) {
+    addLot(lotObject) {
       const lots = this.get('saisie.lots');
-      const numero = lots.length + 1;
-      lots.push({ numero, entite, bons: [] });
+      lots.push(lotObject);
       this.set('saisie.lots', lots);
       this.set('autosave.isDirty', true);
     },

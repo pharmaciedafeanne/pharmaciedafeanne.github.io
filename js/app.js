@@ -2051,6 +2051,7 @@ async function saveNouvelleBis(bisMode, year, month, quinzaine, lots) {
 
 // Helper: Sauvegarder en mode NORMAL
 async function saveNouvelleNormal(year, month, quinzaine, lots, entite) {
+  console.log('ENTER saveNouvelleNormal with:', { year, month, quinzaine, entite, nbLots: lots.length });
   // Utiliser l'entité passée en paramètre (validation déjà faite dans saveNouvelle)
   if (!entite) {
     Logger.error('Entité manquante en mode normal');

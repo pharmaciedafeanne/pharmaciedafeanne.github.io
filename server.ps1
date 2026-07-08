@@ -27,6 +27,11 @@ while ($listener.IsListening) {
 
     $filePath = Join-Path $root $urlPath.TrimStart('/')
 
+    # DÉSACTIVER LE CACHE - FICHIERS FRAIS À CHAQUE REQUÊTE
+    $res.AddHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+    $res.AddHeader("Pragma", "no-cache")
+    $res.AddHeader("Expires", "0")
+
     if (Test-Path $filePath -PathType Leaf) {
       $ext = [System.IO.Path]::GetExtension($filePath)
       $mime = if ($mimeTypes[$ext]) { $mimeTypes[$ext] } else { 'application/octet-stream' }

@@ -1953,12 +1953,14 @@ function removeLot(num) {
 
 async function saveNouvelle() {
   try {
+    console.log('✓ saveNouvelle() START');
     // Récupérer les valeurs
     const year = parseInt(document.getElementById('new-year')?.value || '0');
     const month = parseInt(document.getElementById('new-month')?.value || '0');
     const quinzaine = (document.getElementById('new-quinzaine')?.value || '').trim();
     const entite = AppState.get('saisie.entite');
     const lots = AppState.get('saisie.lots') || [];
+    console.log('✓ Variables récupérées:', { year, month, quinzaine, entite, nbLots: lots.length });
 
     // Vérifier que tous les champs sont remplis
     if (!year || year < 2000 || year > 2100 || !month || month < 1 || month > 12 || !quinzaine || !entite || !lots.length) {

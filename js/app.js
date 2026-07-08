@@ -1290,6 +1290,14 @@ function renderDetailEditLotsBuilder() {
       <button class="btn btn-primary" style="width:100%;padding:12px;font-size:15px" onclick="addLot()">➕ Ajouter un lot</button>
     </div>`;
 
+    // === ÉTAPE 3.5: Total global ===
+    html += `<div style="padding:16px;margin-top:16px;background:var(--primary)15;border:2px solid var(--primary);border-radius:8px">
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <span style="font-weight:600;color:var(--primary);font-size:14px">TOTAL GLOBAL ${entite}:</span>
+        <span style="font-size:20px;font-weight:700;color:var(--primary)" id="total-global-edit">0 F</span>
+      </div>
+    </div>`;
+
     // === ÉTAPE 4: Boutons action (Annuler/Enregistrer) ===
     html += `<div style="padding:20px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border);margin-top:20px">
       <button class="btn btn-outline" onclick="navigate('quinzaines')">Annuler</button>
@@ -1302,6 +1310,9 @@ function renderDetailEditLotsBuilder() {
     lots.forEach(l => {
       if (l.entite) updateLotSubtotal(l.numero);
     });
+
+    // Mettre à jour le total global
+    updateGlobalTotal();
 
     Logger.debug('renderDetailEditLotsBuilder: rendu complété', { nbLots: lots.length, entite, key: editingKey });
 
@@ -1756,6 +1767,7 @@ function updateCell(input) {
 
     Logger.debug('Cell mise à jour', { lotNum, bonId, account, field });
     updateLotSubtotal(lotNum);
+    updateGlobalTotal();
     autoSaveDraft();
 
   } catch (e) {
@@ -1799,6 +1811,37 @@ function updateLotSubtotal(lotNum) {
 
   } catch (e) {
     Logger.error('Erreur updateLotSubtotal', { lotNum, error: e.message });
+  }
+}
+
+function updateGlobalTotal() {
+  try {
+    const lots = AppState.get('saisie.lots') || [];
+    const entite = AppState.get('saisie.entite');
+
+    if (!entite) return;
+
+    const e = entite.toLowerCase();
+    let total = 0;
+
+    // Calculer le total global
+    lots.forEach(lot => {
+      if (lot.bons) {
+        lot.bons.forEach(b => {
+          total += (b.dafeanne && b.dafeanne[e]) || 0;
+          total += (b.depot && b.depot[e]) || 0;
+        });
+      }
+    });
+
+    // Mettre à jour le DOM
+    const el = document.getElementById('total-global-edit');
+    if (el) el.textContent = fmtA(total) + ' F';
+
+    Logger.debug('Total global mis à jour', { entite, total });
+
+  } catch (e) {
+    Logger.error('Erreur updateGlobalTotal', { error: e.message });
   }
 }
 

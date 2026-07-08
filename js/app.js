@@ -1914,11 +1914,19 @@ async function saveNouvelle() {
     const lots = AppState.get('saisie.lots');
     if (!lots || !lots.length) {
       Logger.warn('Tentative save sans lots');
-      toast('Ajoutez au moins un lot', 'error');
+      toast('Ajoutez au least un lot', 'error');
       return;
     }
 
-    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, nbLots: lots.length });
+    // 3. Vérifier qu'on a une entité
+    const entite = AppState.get('saisie.entite');
+    if (!entite || entite === 'null' || entite === '') {
+      Logger.warn('Entité manquante à la sauvegarde');
+      toast('Choisissez l\'entité (INAM ou AMU) avant d\'enregistrer', 'error');
+      return;
+    }
+
+    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, nbLots: lots.length, entite });
 
     const bisMode = AppState.get('bisMode');
 

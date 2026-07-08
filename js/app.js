@@ -1998,7 +1998,7 @@ async function saveNouvelle() {
 
     Logger.info('DEBUG saveNouvelle avant save', { year, month, quinzaine, entite, nbLots: lots.length });
 
-    if (bisMode) {
+    if (bisMode && bisMode.active) {
       // === MODE BIS ===
       await saveNouvelleBis(bisMode, year, month, quinzaine, lots);
     } else {

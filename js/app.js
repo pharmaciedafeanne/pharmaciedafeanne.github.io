@@ -4268,6 +4268,18 @@ async function assClose(section) {
       return;
     }
 
+    const password = prompt(`Entrez votre mot de passe pour clôturer ${section.toUpperCase()}:`);
+    if (!password) return;
+
+    const user = firebase.auth().currentUser;
+    if (!user || !user.email) {
+      toast('❌ Utilisateur non authentifié', 'error');
+      return;
+    }
+
+    const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
+    await user.reauthenticateWithCredential(credential);
+
     const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
     const pharmacieId = (currentUser.pharmacieId || 'DAFEANNE').toUpperCase();
     const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(pharmacieId).collection('assurances').doc(key);

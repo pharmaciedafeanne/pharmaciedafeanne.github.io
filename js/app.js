@@ -223,10 +223,14 @@ function navigate(view, params = {}) {
   document.getElementById('content-title').textContent = titles[view] || '';
 
   ({
+    dashboard:       renderDashboard,
+    quinzaines:      renderQuinzaines,
     detail:          () => renderDetail(appState.detailKey),
     import:          renderImportView,
+    nouvelle:        renderNouvelle,
     users:           renderUsers,
     assurances:      renderAssurances,
+    'inam-amu':      renderInamAmu,
     caisse:          renderCaisse,
     fournisseurs:    renderFournisseurs,
     'catalogue-frs': renderCatalogueFrs,

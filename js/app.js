@@ -1974,7 +1974,6 @@ async function saveNouvelle() {
       return;
     }
 
-<<<<<<< HEAD
     // 2. Vérifier qu'on a au moins un lot
     let lots = AppState.get('saisie.lots');
     if (!lots || !lots.length) {

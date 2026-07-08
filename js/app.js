@@ -4287,10 +4287,14 @@ function updateAssuranceSubtotal(lotNum) {
         totals.amuDp += bon.amuDp || 0;
       });
 
-      document.getElementById(`ass-sub-inamdf-${lotNum}`)?.textContent = fmtA(totals.inamDf);
-      document.getElementById(`ass-sub-inamdp-${lotNum}`)?.textContent = fmtA(totals.inamDp);
-      document.getElementById(`ass-sub-amudf-${lotNum}`)?.textContent = fmtA(totals.amuDf);
-      document.getElementById(`ass-sub-amudp-${lotNum}`)?.textContent = fmtA(totals.amuDp);
+      const elInamDf = document.getElementById(`ass-sub-inamdf-${lotNum}`);
+      if (elInamDf) elInamDf.textContent = fmtA(totals.inamDf);
+      const elInamDp = document.getElementById(`ass-sub-inamdp-${lotNum}`);
+      if (elInamDp) elInamDp.textContent = fmtA(totals.inamDp);
+      const elAmuDf = document.getElementById(`ass-sub-amudf-${lotNum}`);
+      if (elAmuDf) elAmuDf.textContent = fmtA(totals.amuDf);
+      const elAmuDp = document.getElementById(`ass-sub-amudp-${lotNum}`);
+      if (elAmuDp) elAmuDp.textContent = fmtA(totals.amuDp);
     }
   });
 }

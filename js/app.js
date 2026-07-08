@@ -1953,43 +1953,28 @@ function removeLot(num) {
 
 async function saveNouvelle() {
   try {
-    // 1. Récupérer et valider les champs période
-    const yearStr = (document.getElementById('new-year').value || '').trim();
-    const monthStr = (document.getElementById('new-month').value || '').trim();
-    const quinzaine = (document.getElementById('new-quinzaine').value || '').trim();
+    // Récupérer les valeurs directement des champs (méthode simple et fiable)
+    const year = parseInt(document.getElementById('new-year')?.value || '0');
+    const month = parseInt(document.getElementById('new-month')?.value || '0');
+    const quinzaine = (document.getElementById('new-quinzaine')?.value || '').trim();
+    const entite = AppState.get('saisie.entite');
+    const lots = AppState.get('saisie.lots') || [];
 
-    const year = yearStr ? parseInt(yearStr) : null;
-    const month = monthStr ? parseInt(monthStr) : null;
-
-    // Vérifier que tous les champs sont remplis AVANT validation
-    if (!yearStr || !monthStr || !quinzaine) {
+    // Vérifier que tous les champs sont remplis
+    if (!year || year < 2000 || year > 2100 || !month || month < 1 || month > 12 || !quinzaine || !entite || !lots.length) {
       const missing = [];
-      if (!yearStr) missing.push('Année');
-      if (!monthStr) missing.push('Mois');
+      if (!year || year < 2000 || year > 2100) missing.push('Année');
+      if (!month || month < 1 || month > 12) missing.push('Mois');
       if (!quinzaine) missing.push('Quinzaine');
+      if (!entite) missing.push('Entité');
+      if (!lots.length) missing.push('Au moins 1 lot');
+
+      Logger.warn('Champs manquants pour sauvegarde', { year, month, quinzaine, entite, nbLots: lots.length, missing });
       toast(`Champs requis manquants: ${missing.join(', ')}`, 'error');
       return;
     }
 
-    try {
-      Validation.requireNumber(year, 'Année', 2000, 2100);
-      Validation.requireNumber(month, 'Mois', 1, 12);
-      Validation.requireEnum(quinzaine, 'Quinzaine', [QUINZAINE.Q1, QUINZAINE.Q2]);
-    } catch (e) {
-      Logger.warn('Validation période échouée', { year, month, quinzaine, error: e.message });
-      toast(e.message, 'error');
-      return;
-    }
-
-    // 2. Vérifier qu'on a au moins un lot
-    const lots = AppState.get('saisie.lots');
-    if (!lots || !lots.length) {
-      Logger.warn('Tentative save sans lots');
-      toast('Ajoutez au moins un lot', 'error');
-      return;
-    }
-
-    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, nbLots: lots.length });
+    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, entite, nbLots: lots.length });
 
     const bisMode = AppState.get('bisMode');
 
@@ -1998,7 +1983,7 @@ async function saveNouvelle() {
       await saveNouvelleBis(bisMode, year, month, quinzaine, lots);
     } else {
       // === MODE NORMAL ===
-      await saveNouvelleNormal(year, month, quinzaine, lots);
+      await savePeriod({ year, month, quinzaine, entite, lots, brouillon: false });
     }
 
     // Nettoyage et redirection

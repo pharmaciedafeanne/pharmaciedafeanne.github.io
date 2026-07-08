@@ -1944,9 +1944,22 @@ function removeLot(num) {
 async function saveNouvelle() {
   try {
     // 1. Récupérer et valider les champs période
-    const year = parseInt(document.getElementById('new-year').value);
-    const month = parseInt(document.getElementById('new-month').value);
-    const quinzaine = document.getElementById('new-quinzaine').value;
+    const yearStr = (document.getElementById('new-year').value || '').trim();
+    const monthStr = (document.getElementById('new-month').value || '').trim();
+    const quinzaine = (document.getElementById('new-quinzaine').value || '').trim();
+
+    const year = yearStr ? parseInt(yearStr) : null;
+    const month = monthStr ? parseInt(monthStr) : null;
+
+    // Vérifier que tous les champs sont remplis AVANT validation
+    if (!yearStr || !monthStr || !quinzaine) {
+      const missing = [];
+      if (!yearStr) missing.push('Année');
+      if (!monthStr) missing.push('Mois');
+      if (!quinzaine) missing.push('Quinzaine');
+      toast(`Champs requis manquants: ${missing.join(', ')}`, 'error');
+      return;
+    }
 
     try {
       Validation.requireNumber(year, 'Année', 2000, 2100);

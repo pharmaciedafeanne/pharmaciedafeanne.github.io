@@ -36,6 +36,12 @@ while ($listener.IsListening) {
       $ext = [System.IO.Path]::GetExtension($filePath)
       $mime = if ($mimeTypes[$ext]) { $mimeTypes[$ext] } else { 'application/octet-stream' }
       $bytes = [System.IO.File]::ReadAllBytes($filePath)
+
+      # DEBUG: Log pour vérifier le chemin et la taille
+      if ($urlPath -like "*/app.js") {
+        Write-Host "📄 Serving app.js from: $filePath ($(($bytes | Measure-Object -Property Length).Sum) bytes)" -ForegroundColor Cyan
+      }
+
       $res.ContentType = $mime
       $res.ContentLength64 = $bytes.Length
       $res.OutputStream.Write($bytes, 0, $bytes.Length)

@@ -4040,18 +4040,20 @@ async function check72hNotifications() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  ASSURANCES INAM AMU
+//  ASSURANCES INAM AMU — TABLEAU SIMPLE ÉDITABLE
 // ══════════════════════════════════════════════════════════════
 
-async function renderAssurances() {
+// État temporaire (avant enregistrement)
+let assCurrentData = { bons: [], isClosed: false };
+
+async function assLoadData() {
   try {
-    const year = document.getElementById('ass-year')?.value;
-    const month = document.getElementById('ass-month')?.value;
-    const period = document.getElementById('ass-period')?.value;
+    const year = document.getElementById('ass-year').value;
+    const month = document.getElementById('ass-month').value;
+    const period = document.getElementById('ass-period').value;
 
     if (!year || !month || !period) {
-      document.getElementById('assurance-lots-container').innerHTML =
-        '<div style="text-align:center;padding:40px;color:var(--text-muted)">Sélectionnez année, mois et quinzaine</div>';
+      toast('Sélectionnez année, mois et quinzaine', 'error');
       return;
     }
 
@@ -4060,306 +4062,179 @@ async function renderAssurances() {
       .collection('assurances').doc(key);
     const doc = await docRef.get();
 
-    if (!doc.exists) {
-      document.getElementById('assurance-lots-container').innerHTML =
-        '<div style="text-align:center;padding:40px;color:var(--text-muted)">Aucune saisie. Cliquez sur "Nouveau lot" pour commencer.</div>';
-      return;
+    // Charger les données ou créer une structure vide
+    if (doc.exists) {
+      assCurrentData = doc.data();
+    } else {
+      assCurrentData = { bons: [], isClosed: false };
     }
 
-    const data = doc.data();
-    const lots = data.lots || [];
-
-    const html = lots.map(lot => `
-      <div class="card" style="margin-bottom:16px;border-left:3px solid var(--primary)">
-        <div class="card-header">
-          <span>LOT N°${lot.numero}</span>
-          <button class="btn btn-outline btn-sm" onclick="addAssuranceBon(${lot.numero})">➕ Ajouter bon</button>
-        </div>
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>BON</th>
-                <th>Date</th>
-                <th class="amount">INAM DAFEANNE</th>
-                <th class="amount">INAM DÉPÔT</th>
-                <th class="amount">AMU DAFEANNE</th>
-                <th class="amount">AMU DÉPÔT</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="ass-bon-rows-${lot.numero}">
-              ${(lot.bons || []).map(bon => `
-                <tr>
-                  <td>${bon.numero}</td>
-                  <td><input type="date" value="${bon.date || ''}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'date', this.value)"></td>
-                  <td class="amount"><input type="number" value="${bon.inamDf || 0}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'inamDf', this.value)" style="width:80px"></td>
-                  <td class="amount"><input type="number" value="${bon.inamDp || 0}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'inamDp', this.value)" style="width:80px"></td>
-                  <td class="amount"><input type="number" value="${bon.amuDf || 0}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'amuDf', this.value)" style="width:80px"></td>
-                  <td class="amount"><input type="number" value="${bon.amuDp || 0}" onchange="updateAssuranceBon(${lot.numero}, '${bon.id}', 'amuDp', this.value)" style="width:80px"></td>
-                  <td><button class="btn btn-danger btn-sm" onclick="deleteAssuranceBon(${lot.numero}, '${bon.id}')">🗑️</button></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-        <div style="padding:12px;background:var(--primary)08;border-top:1px solid var(--border);font-weight:600;display:flex;justify-content:space-around;font-size:13px">
-          <div>INAM-DF: <strong id="ass-sub-inamdf-${lot.numero}">0</strong> F</div>
-          <div>INAM-DP: <strong id="ass-sub-inamdp-${lot.numero}">0</strong> F</div>
-          <div>AMU-DF: <strong id="ass-sub-amudf-${lot.numero}">0</strong> F</div>
-          <div>AMU-DP: <strong id="ass-sub-amudp-${lot.numero}">0</strong> F</div>
-        </div>
-      </div>
-    `).join('');
-
-    document.getElementById('assurance-lots-container').innerHTML = html;
-    updateAssuranceTotal();
-
-    // Calculer les sous-totaux
-    lots.forEach(lot => updateAssuranceSubtotal(lot.numero));
-
+    assRenderTable();
+    assUpdateTotal();
+    assShowStatus();
   } catch (e) {
-    Logger.error('Erreur renderAssurances', { error: e.message });
+    Logger.error('Erreur assLoadData', { error: e.message });
     toast('Erreur: ' + e.message, 'error');
   }
 }
 
-function addAssuranceLot() {
-  const year = document.getElementById('ass-year')?.value;
-  const month = document.getElementById('ass-month')?.value;
-  const period = document.getElementById('ass-period')?.value;
+function assRenderTable() {
+  const tbody = document.getElementById('ass-tbody');
+  tbody.innerHTML = '';
 
-  if (!year || !month || !period) {
-    toast('Sélectionnez année, mois et quinzaine', 'error');
-    return;
+  const bons = assCurrentData.bons || [];
+  bons.forEach((bon, idx) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><input type="date" value="${bon.date || ''}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'date', this.value)"></td>
+      <td class="amount"><input type="number" value="${bon.inamDf || 0}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'inamDf', this.value)" style="width:100%"></td>
+      <td class="amount"><input type="number" value="${bon.inamDp || 0}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'inamDp', this.value)" style="width:100%"></td>
+      <td class="amount"><input type="number" value="${bon.amuDf || 0}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'amuDf', this.value)" style="width:100%"></td>
+      <td class="amount"><input type="number" value="${bon.amuDp || 0}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'amuDp', this.value)" style="width:100%"></td>
+      <td><button class="btn btn-danger btn-sm" onclick="assDeleteRow(${idx})">🗑️</button></td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function assUpdateRow(idx, field, value) {
+  if (!assCurrentData.bons[idx]) return;
+
+  if (['inamDf', 'inamDp', 'amuDf', 'amuDp'].includes(field)) {
+    assCurrentData.bons[idx][field] = parseInt(value) || 0;
+  } else {
+    assCurrentData.bons[idx][field] = value;
   }
 
-  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
-    .collection('assurances').doc(key);
-
-  docRef.get().then(doc => {
-    const data = doc.exists ? doc.data() : { lots: [] };
-    const lots = data.lots || [];
-    const numero = lots.length + 1;
-
-    const newLot = {
-      numero,
-      bons: [{
-        id: `bon_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
-        numero: 1,
-        date: new Date().toISOString().split('T')[0],
-        inamDf: 0,
-        inamDp: 0,
-        amuDf: 0,
-        amuDp: 0
-      }]
-    };
-
-    lots.push(newLot);
-    docRef.set({ lots, year, month, period, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
-      .then(() => {
-        Logger.info('Lot ajouté', { numero });
-        renderAssurances();
-      })
-      .catch(e => {
-        Logger.error('Erreur addLot', { error: e.message });
-        toast('Erreur: ' + e.message, 'error');
-      });
-  });
+  assUpdateTotal();
 }
 
-function addAssuranceBon(lotNum) {
-  const year = document.getElementById('ass-year')?.value;
-  const month = document.getElementById('ass-month')?.value;
-  const period = document.getElementById('ass-period')?.value;
-
-  if (!year || !month || !period) return;
-
-  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
-    .collection('assurances').doc(key);
-
-  docRef.get().then(doc => {
-    const data = doc.data();
-    const lots = data.lots || [];
-    const lot = lots.find(l => l.numero === lotNum);
-
-    if (lot && lot.bons.length < 10) {
-      const bonNum = lot.bons.length + 1;
-      lot.bons.push({
-        id: `bon_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
-        numero: bonNum,
-        date: new Date().toISOString().split('T')[0],
-        inamDf: 0,
-        inamDp: 0,
-        amuDf: 0,
-        amuDp: 0
-      });
-
-      docRef.update({ lots, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        .then(() => renderAssurances())
-        .catch(e => toast('Erreur: ' + e.message, 'error'));
-    }
-  });
+function assDeleteRow(idx) {
+  if (!confirm('Supprimer cette ligne?')) return;
+  assCurrentData.bons.splice(idx, 1);
+  assRenderTable();
+  assUpdateTotal();
 }
 
-function updateAssuranceBon(lotNum, bonId, field, value) {
-  const year = document.getElementById('ass-year')?.value;
-  const month = document.getElementById('ass-month')?.value;
-  const period = document.getElementById('ass-period')?.value;
-
-  if (!year || !month || !period) return;
-
-  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
-    .collection('assurances').doc(key);
-
-  docRef.get().then(doc => {
-    const data = doc.data();
-    const lots = data.lots || [];
-    const lot = lots.find(l => l.numero === lotNum);
-    const bon = lot?.bons.find(b => b.id === bonId);
-
-    if (bon) {
-      bon[field] = field.startsWith('inam') || field.startsWith('amu') ? parseInt(value) || 0 : value;
-      docRef.update({ lots, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        .then(() => {
-          updateAssuranceSubtotal(lotNum);
-          updateAssuranceTotal();
-        })
-        .catch(e => toast('Erreur: ' + e.message, 'error'));
-    }
+function assAddRow() {
+  assCurrentData.bons.push({
+    date: new Date().toISOString().split('T')[0],
+    inamDf: 0,
+    inamDp: 0,
+    amuDf: 0,
+    amuDp: 0
   });
+  assRenderTable();
+  assUpdateTotal();
 }
 
-function deleteAssuranceBon(lotNum, bonId) {
-  if (!confirm('Supprimer ce bon?')) return;
+function assUpdateTotal() {
+  const bons = assCurrentData.bons || [];
+  const totals = { inamDf: 0, inamDp: 0, amuDf: 0, amuDp: 0 };
 
-  const year = document.getElementById('ass-year')?.value;
-  const month = document.getElementById('ass-month')?.value;
-  const period = document.getElementById('ass-period')?.value;
-
-  if (!year || !month || !period) return;
-
-  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
-    .collection('assurances').doc(key);
-
-  docRef.get().then(doc => {
-    const data = doc.data();
-    const lots = data.lots || [];
-    const lot = lots.find(l => l.numero === lotNum);
-
-    if (lot) {
-      lot.bons = lot.bons.filter(b => b.id !== bonId);
-      lot.bons.forEach((b, i) => b.numero = i + 1);
-
-      docRef.update({ lots, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        .then(() => renderAssurances())
-        .catch(e => toast('Erreur: ' + e.message, 'error'));
-    }
+  bons.forEach(bon => {
+    totals.inamDf += bon.inamDf || 0;
+    totals.inamDp += bon.inamDp || 0;
+    totals.amuDf += bon.amuDf || 0;
+    totals.amuDp += bon.amuDp || 0;
   });
+
+  document.getElementById('ass-total-inamdf').textContent = fmtA(totals.inamDf);
+  document.getElementById('ass-total-inamdp').textContent = fmtA(totals.inamDp);
+  document.getElementById('ass-total-amudf').textContent = fmtA(totals.amuDf);
+  document.getElementById('ass-total-amudp').textContent = fmtA(totals.amuDp);
 }
 
-function updateAssuranceSubtotal(lotNum) {
-  const year = document.getElementById('ass-year')?.value;
-  const month = document.getElementById('ass-month')?.value;
-  const period = document.getElementById('ass-period')?.value;
-
-  if (!year || !month || !period) return;
-
-  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
-    .collection('assurances').doc(key);
-
-  docRef.get().then(doc => {
-    const data = doc.data();
-    const lots = data.lots || [];
-    const lot = lots.find(l => l.numero === lotNum);
-
-    if (lot) {
-      const totals = { inamDf: 0, inamDp: 0, amuDf: 0, amuDp: 0 };
-      (lot.bons || []).forEach(bon => {
-        totals.inamDf += bon.inamDf || 0;
-        totals.inamDp += bon.inamDp || 0;
-        totals.amuDf += bon.amuDf || 0;
-        totals.amuDp += bon.amuDp || 0;
-      });
-
-      const elInamDf = document.getElementById(`ass-sub-inamdf-${lotNum}`);
-      if (elInamDf) elInamDf.textContent = fmtA(totals.inamDf);
-      const elInamDp = document.getElementById(`ass-sub-inamdp-${lotNum}`);
-      if (elInamDp) elInamDp.textContent = fmtA(totals.inamDp);
-      const elAmuDf = document.getElementById(`ass-sub-amudf-${lotNum}`);
-      if (elAmuDf) elAmuDf.textContent = fmtA(totals.amuDf);
-      const elAmuDp = document.getElementById(`ass-sub-amudp-${lotNum}`);
-      if (elAmuDp) elAmuDp.textContent = fmtA(totals.amuDp);
-    }
-  });
-}
-
-function updateAssuranceTotal() {
-  const year = document.getElementById('ass-year')?.value;
-  const month = document.getElementById('ass-month')?.value;
-  const period = document.getElementById('ass-period')?.value;
-
-  if (!year || !month || !period) return;
-
-  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
-    .collection('assurances').doc(key);
-
-  docRef.get().then(doc => {
-    const data = doc.data();
-    const lots = data.lots || [];
-
-    const totals = { inamDf: 0, inamDp: 0, amuDf: 0, amuDp: 0 };
-    lots.forEach(lot => {
-      (lot.bons || []).forEach(bon => {
-        totals.inamDf += bon.inamDf || 0;
-        totals.inamDp += bon.inamDp || 0;
-        totals.amuDf += bon.amuDf || 0;
-        totals.amuDp += bon.amuDp || 0;
-      });
-    });
-
-    const elTotalInamDf = document.getElementById('ass-total-inam-df');
-    if (elTotalInamDf) elTotalInamDf.textContent = fmtA(totals.inamDf);
-    const elTotalInamDp = document.getElementById('ass-total-inam-dp');
-    if (elTotalInamDp) elTotalInamDp.textContent = fmtA(totals.inamDp);
-    const elTotalAmuDf = document.getElementById('ass-total-amu-df');
-    if (elTotalAmuDf) elTotalAmuDf.textContent = fmtA(totals.amuDf);
-    const elTotalAmuDp = document.getElementById('ass-total-amu-dp');
-    if (elTotalAmuDp) elTotalAmuDp.textContent = fmtA(totals.amuDp);
-  });
-}
-
-function closeAssuranceQuinzaine() {
-  const year = document.getElementById('ass-year')?.value;
-  const month = document.getElementById('ass-month')?.value;
-  const period = document.getElementById('ass-period')?.value;
-
-  if (!year || !month || !period) {
-    toast('Sélectionnez une quinzaine', 'error');
-    return;
+function assShowStatus() {
+  const statusEl = document.getElementById('ass-status');
+  if (assCurrentData.isClosed) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = '#ffebee';
+    statusEl.style.color = '#c62828';
+    statusEl.style.border = '1px solid #ef5350';
+    statusEl.innerHTML = '🔒 Cette quinzaine est clôturée et ne peut pas être modifiée';
+  } else {
+    statusEl.style.display = 'none';
   }
+}
 
-  if (!confirm(`Clôturer ${period} ${MOIS_APP[month]} ${year}? Les saisies ne seront plus modifiables.`)) return;
+async function assSave() {
+  try {
+    if (assCurrentData.isClosed) {
+      toast('❌ Cette quinzaine est clôturée', 'error');
+      return;
+    }
 
-  const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-  const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
-    .collection('assurances').doc(key);
+    const year = document.getElementById('ass-year').value;
+    const month = document.getElementById('ass-month').value;
+    const period = document.getElementById('ass-period').value;
 
-  docRef.update({ closed: true, closedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    .then(() => {
-      toast('Quinzaine clôturée ✓', 'success');
-      renderAssurances();
-    })
-    .catch(e => {
-      Logger.error('Erreur closeAssurance', { error: e.message });
-      toast('Erreur: ' + e.message, 'error');
+    if (!year || !month || !period) {
+      toast('Sélectionnez année, mois et quinzaine', 'error');
+      return;
+    }
+
+    const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+      .collection('assurances').doc(key);
+
+    await docRef.set({
+      bons: assCurrentData.bons,
+      isClosed: false,
+      year,
+      month,
+      period,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    toast('✓ Saisies enregistrées', 'success');
+  } catch (e) {
+    Logger.error('Erreur assSave', { error: e.message });
+    toast('Erreur: ' + e.message, 'error');
+  }
+}
+
+async function assClose() {
+  try {
+    if (assCurrentData.isClosed) {
+      toast('❌ Déjà clôturée', 'error');
+      return;
+    }
+
+    const year = document.getElementById('ass-year').value;
+    const month = document.getElementById('ass-month').value;
+    const period = document.getElementById('ass-period').value;
+
+    if (!year || !month || !period) {
+      toast('Sélectionnez année, mois et quinzaine', 'error');
+      return;
+    }
+
+    if (!confirm(`Clôturer ${period} ${MOIS_APP[parseInt(month)] || ''} ${year}?\nLes saisies ne seront plus modifiables.`)) {
+      return;
+    }
+
+    const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
+    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+      .collection('assurances').doc(key);
+
+    await docRef.update({
+      isClosed: true,
+      closedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+
+    assCurrentData.isClosed = true;
+    assShowStatus();
+    toast('✓ Quinzaine clôturée', 'success');
+  } catch (e) {
+    Logger.error('Erreur assClose', { error: e.message });
+    toast('Erreur: ' + e.message, 'error');
+  }
+}
+
+// Rendu initial (appelé par navigate)
+function renderAssurances() {
+  // Interface vide au démarrage - l'utilisateur clique "Charger"
 }
 
 // ══════════════════════════════════════════════════════════════

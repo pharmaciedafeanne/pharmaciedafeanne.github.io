@@ -4324,10 +4324,14 @@ function updateAssuranceTotal() {
       });
     });
 
-    document.getElementById('ass-total-inam-df')?.textContent = fmtA(totals.inamDf);
-    document.getElementById('ass-total-inam-dp')?.textContent = fmtA(totals.inamDp);
-    document.getElementById('ass-total-amu-df')?.textContent = fmtA(totals.amuDf);
-    document.getElementById('ass-total-amu-dp')?.textContent = fmtA(totals.amuDp);
+    const elTotalInamDf = document.getElementById('ass-total-inam-df');
+    if (elTotalInamDf) elTotalInamDf.textContent = fmtA(totals.inamDf);
+    const elTotalInamDp = document.getElementById('ass-total-inam-dp');
+    if (elTotalInamDp) elTotalInamDp.textContent = fmtA(totals.inamDp);
+    const elTotalAmuDf = document.getElementById('ass-total-amu-df');
+    if (elTotalAmuDf) elTotalAmuDf.textContent = fmtA(totals.amuDf);
+    const elTotalAmuDp = document.getElementById('ass-total-amu-dp');
+    if (elTotalAmuDp) elTotalAmuDp.textContent = fmtA(totals.amuDp);
   });
 }
 

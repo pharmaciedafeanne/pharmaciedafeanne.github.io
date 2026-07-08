@@ -4,7 +4,7 @@
     {
       "name": "Pharmacie Dev Server",
       "runtimeExecutable": "powershell",
-      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WorkingDirectory", "C:\\Users\\ELITEBOOK\\Documents\\GitHub\\github pharmacie dafeanne", "-File", "server.ps1"],
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "server.ps1"],
       "port": 3000
     }
   ]

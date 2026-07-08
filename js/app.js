@@ -1994,11 +1994,14 @@ async function saveNouvelle() {
 
     const bisMode = AppState.get('bisMode');
 
+    Logger.info('DEBUG saveNouvelle avant save', { year, month, quinzaine, entite, nbLots: lots.length });
+
     if (bisMode) {
       // === MODE BIS ===
       await saveNouvelleBis(bisMode, year, month, quinzaine, lots);
     } else {
       // === MODE NORMAL ===
+      Logger.info('DEBUG appel saveNouvelleNormal avec', { year, month, quinzaine, entite, nbLots: lots.length });
       await saveNouvelleNormal(year, month, quinzaine, lots, entite);
     }
 

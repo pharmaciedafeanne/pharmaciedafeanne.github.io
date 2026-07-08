@@ -892,32 +892,30 @@ function setSaisieEntite(entite) {
 
 function renderNouvelle() {
   try {
+    // Récupérer l'état BIS
+    const bisMode = AppState.get('bisMode');
+
     // Réinitialiser le formulaire
     document.getElementById('form-nouvelle').reset();
     AppState.set('saisie.lots', []);
     AppState.set('saisie.entite', null);
 
-    // TOUJOURS déverrouiller les champs au démarrage
-    unlockFormFields();
-
-    // Récupérer l'état BIS
-    const bisMode = AppState.get('bisMode');
+    // Gérer le bandeau BIS
+    const banner = document.getElementById('bis-mode-banner');
+    if (banner) {
+      if (bisMode) {
+        renderBisModeGallery(bisMode);
+        lockFormFields(bisMode);
+        AppState.set('saisie.entite', bisMode.entite);
+      } else {
+        banner.innerHTML = '';
+        unlockFormFields();
+      }
+    }
 
     // Proposer restauration brouillon (hors mode BIS)
     if (!bisMode) {
       setTimeout(restoreDraft, 100);
-    }
-
-    // Rendu du bandeau BIS
-    const banner = document.getElementById('bis-mode-banner');
-    if (!banner) return;
-
-    if (bisMode) {
-      renderBisModeGallery(bisMode);
-      lockFormFields(bisMode);
-      AppState.set('saisie.entite', bisMode.entite);
-    } else {
-      banner.innerHTML = '';
     }
 
     renderLotsBuilder();

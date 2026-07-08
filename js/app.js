@@ -1303,9 +1303,11 @@ function renderDetailEditLotsBuilder() {
 
     // === ÉTAPE 3.5: Total global ===
     html += `<div style="padding:16px;margin-top:16px;background:var(--primary)15;border:2px solid var(--primary);border-radius:8px">
-      <div style="display:flex;align-items:baseline;gap:12px">
-        <span style="font-weight:600;color:var(--primary);font-size:14px">TOTAL GLOBAL ${entite}:</span>
-        <span style="font-size:20px;font-weight:700;color:var(--primary)" id="total-global-edit">0 F</span>
+      <div style="font-weight:600;color:var(--primary);font-size:14px;margin-bottom:8px">TOTAL GLOBAL ${entite}</div>
+      <div style="display:flex;justify-content:space-between;gap:20px;font-size:16px">
+        <div>💊 DAFEANNE: <strong style="color:var(--primary);font-size:18px" id="total-global-dafeanne">0</strong> F</div>
+        <div>🏪 DÉPÔT: <strong style="color:var(--primary);font-size:18px" id="total-global-depot">0</strong> F</div>
+        <div style="border-left:2px solid var(--primary);padding-left:20px">TOTAL: <strong style="color:var(--primary);font-size:20px" id="total-global-edit">0</strong> F</div>
       </div>
     </div>`;
 
@@ -1398,9 +1400,11 @@ function renderLotsBuilder() {
 
     // === ÉTAPE 5: Total global ===
     html += `<div style="padding:16px;margin-top:16px;background:var(--primary)15;border:2px solid var(--primary);border-radius:8px">
-      <div style="display:flex;align-items:baseline;gap:12px">
-        <span style="font-weight:600;color:var(--primary);font-size:14px">TOTAL GLOBAL ${entite}:</span>
-        <span style="font-size:20px;font-weight:700;color:var(--primary)" id="total-global-edit">0 F</span>
+      <div style="font-weight:600;color:var(--primary);font-size:14px;margin-bottom:8px">TOTAL GLOBAL ${entite}</div>
+      <div style="display:flex;justify-content:space-between;gap:20px;font-size:16px">
+        <div>💊 DAFEANNE: <strong style="color:var(--primary);font-size:18px" id="total-global-dafeanne">0</strong> F</div>
+        <div>🏪 DÉPÔT: <strong style="color:var(--primary);font-size:18px" id="total-global-depot">0</strong> F</div>
+        <div style="border-left:2px solid var(--primary);padding-left:20px">TOTAL: <strong style="color:var(--primary);font-size:20px" id="total-global-edit">0</strong> F</div>
       </div>
     </div>`;
 
@@ -1848,23 +1852,30 @@ function updateGlobalTotal() {
     if (!entite) return;
 
     const e = entite.toLowerCase();
-    let total = 0;
+    let dfTotal = 0, dpTotal = 0;
 
-    // Calculer le total global
+    // Calculer les totaux DAFEANNE et DÉPÔT
     lots.forEach(lot => {
       if (lot.bons) {
         lot.bons.forEach(b => {
-          total += (b.dafeanne && b.dafeanne[e]) || 0;
-          total += (b.depot && b.depot[e]) || 0;
+          dfTotal += (b.dafeanne && b.dafeanne[e]) || 0;
+          dpTotal += (b.depot && b.depot[e]) || 0;
         });
       }
     });
 
-    // Mettre à jour le DOM
-    const el = document.getElementById('total-global-edit');
-    if (el) el.textContent = fmtA(total) + ' F';
+    const total = dfTotal + dpTotal;
 
-    Logger.debug('Total global mis à jour', { entite, total });
+    // Mettre à jour les éléments DOM (DAFEANNE, DÉPÔT, TOTAL)
+    const dfEl = document.getElementById('total-global-dafeanne');
+    const dpEl = document.getElementById('total-global-depot');
+    const totalEl = document.getElementById('total-global-edit');
+
+    if (dfEl) dfEl.textContent = fmtA(dfTotal);
+    if (dpEl) dpEl.textContent = fmtA(dpTotal);
+    if (totalEl) totalEl.textContent = fmtA(total);
+
+    Logger.debug('Total global mis à jour', { entite, dafeanne: dfTotal, depot: dpTotal, total });
 
   } catch (e) {
     Logger.error('Erreur updateGlobalTotal', { error: e.message });

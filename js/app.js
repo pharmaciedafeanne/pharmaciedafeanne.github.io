@@ -2014,7 +2014,12 @@ async function saveNouvelle() {
     clearDraft();
 
     Logger.info('Saisie enregistrée avec succès');
-    navigate('quinzaines');
+    toast('Quinzaine enregistrée! ✓', 'success');
+
+    // Attendre que Firestore termine l'écriture avant de naviguer
+    setTimeout(() => {
+      navigate('quinzaines');
+    }, 500);
 
   } catch (e) {
     Logger.error('Erreur sauvegarde saisie', { error: e.message, stack: e.stack });

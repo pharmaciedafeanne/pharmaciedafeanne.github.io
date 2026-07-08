@@ -4070,8 +4070,11 @@ async function assLoadData() {
     const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(pharmacieId).collection('assurances').doc(key);
     const doc = await docRef.get();
 
-    if (doc.exists && doc.data().inam && doc.data().amu) {
-      assCurrentData = doc.data();
+    if (doc.exists) {
+      assCurrentData = {
+        inam: doc.data().inam || { lots: [], isClosed: false },
+        amu: doc.data().amu || { lots: [], isClosed: false }
+      };
     } else {
       assCurrentData = { inam: { lots: [], isClosed: false }, amu: { lots: [], isClosed: false } };
     }

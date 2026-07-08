@@ -394,8 +394,8 @@ async function saveDetailEdit(key) {
 
     const period = snap.data();
 
-    // Sauvegarder avec les données d'AppState
-    await savePeriod({
+    // Créer l'objet à sauvegarder avec les lots modifiés
+    const toSave = {
       year: period.year,
       month: period.month,
       quinzaine: period.quinzaine,
@@ -403,7 +403,13 @@ async function saveDetailEdit(key) {
       lots: lots,
       brouillon: false,
       _key: key
-    });
+    };
+
+    // IMPORTANT: Recalculer les totaux avant sauvegarde
+    const withTotaux = recalcPeriod(toSave);
+
+    // Sauvegarder avec les données d'AppState et les totaux recalculés
+    await savePeriod(withTotaux);
 
     toast(`Quinzaine enregistrée ✓`, 'success');
     logAction(`Modification quinzaine`, `${period.quinzaine} ${MOIS_APP[period.month]} ${period.year}`, currentUser?.name || '');

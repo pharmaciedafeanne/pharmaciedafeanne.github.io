@@ -4040,11 +4040,19 @@ async function check72hNotifications() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  ASSURANCES INAM AMU — TABLEAU SIMPLE ÉDITABLE
+//  ASSURANCES INAM AMU — LOTS DE 10 AVEC SOUS-TOTAUX
 // ══════════════════════════════════════════════════════════════
 
-// État temporaire (avant enregistrement)
-let assCurrentData = { bons: [], isClosed: false };
+let assCurrentData = { inam: { lots: [], isClosed: false }, amu: { lots: [], isClosed: false } };
+let assCurrentTab = 'inam';
+
+function assSwitchTab(tab) {
+  assCurrentTab = tab;
+  document.getElementById('ass-tab-inam').style.borderBottom = tab === 'inam' ? '3px solid var(--primary)' : '3px solid transparent';
+  document.getElementById('ass-tab-amu').style.borderBottom = tab === 'amu' ? '3px solid var(--primary)' : '3px solid transparent';
+  document.getElementById('ass-inam-container').style.display = tab === 'inam' ? 'block' : 'none';
+  document.getElementById('ass-amu-container').style.display = tab === 'amu' ? 'block' : 'none';
+}
 
 async function assLoadData() {
   try {
@@ -4058,19 +4066,19 @@ async function assLoadData() {
     }
 
     const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc((currentUser.pharmacieId || 'DAFEANNE').toUpperCase())
-      .collection('assurances').doc(key);
+    const pharmacieId = (currentUser.pharmacieId || 'DAFEANNE').toUpperCase();
+    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(pharmacieId).collection('assurances').doc(key);
     const doc = await docRef.get();
 
-    // Charger les données ou créer une structure vide
-    if (doc.exists) {
+    if (doc.exists && doc.data().inam && doc.data().amu) {
       assCurrentData = doc.data();
     } else {
-      assCurrentData = { bons: [], isClosed: false };
+      assCurrentData = { inam: { lots: [], isClosed: false }, amu: { lots: [], isClosed: false } };
     }
 
-    assRenderTable();
-    assUpdateTotal();
+    assRenderTable('inam');
+    assRenderTable('amu');
+    assUpdateTotals();
     assShowStatus();
   } catch (e) {
     Logger.error('Erreur assLoadData', { error: e.message });
@@ -4078,90 +4086,134 @@ async function assLoadData() {
   }
 }
 
-function assRenderTable() {
-  const tbody = document.getElementById('ass-tbody');
+function assRenderTable(section) {
+  const section_data = assCurrentData[section] || { lots: [], isClosed: false };
+  const tbody_id = `ass-tbody-${section}`;
+  const tbody = document.getElementById(tbody_id);
   tbody.innerHTML = '';
 
-  const bons = assCurrentData.bons || [];
-  bons.forEach((bon, idx) => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td><input type="date" value="${bon.date || ''}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'date', this.value)"></td>
-      <td class="amount"><input type="number" value="${bon.inamDf || 0}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'inamDf', this.value)" style="width:100%"></td>
-      <td class="amount"><input type="number" value="${bon.inamDp || 0}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'inamDp', this.value)" style="width:100%"></td>
-      <td class="amount"><input type="number" value="${bon.amuDf || 0}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'amuDf', this.value)" style="width:100%"></td>
-      <td class="amount"><input type="number" value="${bon.amuDp || 0}" data-idx="${idx}" onchange="assUpdateRow(${idx}, 'amuDp', this.value)" style="width:100%"></td>
-      <td><button class="btn btn-danger btn-sm" onclick="assDeleteRow(${idx})">🗑️</button></td>
+  const cols = section === 'inam' ? [{ key: 'inamDf', label: 'INAM-DF' }, { key: 'inamDp', label: 'INAM-DP' }] : [{ key: 'amuDf', label: 'AMU-DF' }, { key: 'amuDp', label: 'AMU-DP' }];
+
+  (section_data.lots || []).forEach((lot, lotIdx) => {
+    lot.bons = lot.bons || [];
+    lot.bons.forEach((bon, bonIdx) => {
+      const row = document.createElement('tr');
+      const globalIdx = lotIdx * 100 + bonIdx;
+      row.innerHTML = `
+        <td><input type="date" value="${bon.date || ''}" onchange="assUpdateBon('${section}', ${lotIdx}, ${bonIdx}, 'date', this.value)" style="width:100%"></td>
+        ${cols.map(col => `<td class="amount"><input type="number" value="${bon[col.key] || 0}" onchange="assUpdateBon('${section}', ${lotIdx}, ${bonIdx}, '${col.key}', this.value)" style="width:100%"></td>`).join('')}
+        <td><button class="btn btn-danger btn-sm" onclick="assDeleteBon('${section}', ${lotIdx}, ${bonIdx})">🗑️</button></td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    const sousTotal = assCalculateLotTotal(section, lotIdx);
+    const stRow = document.createElement('tr');
+    stRow.style.background = 'var(--border)';
+    stRow.style.fontWeight = 'bold';
+    stRow.innerHTML = `
+      <td style="padding:8px"><strong>LOT ${lot.numero} Sous-total</strong></td>
+      ${cols.map(col => `<td class="amount"><strong>${fmtA(sousTotal[col.key] || 0)}</strong> F</td>`).join('')}
+      <td></td>
     `;
-    tbody.appendChild(row);
+    tbody.appendChild(stRow);
   });
 }
 
-function assUpdateRow(idx, field, value) {
-  if (!assCurrentData.bons[idx]) return;
+function assCalculateLotTotal(section, lotIdx) {
+  const lot = (assCurrentData[section] || {}).lots?.[lotIdx];
+  if (!lot) return {};
+
+  const bons = lot.bons || [];
+  const keys = section === 'inam' ? ['inamDf', 'inamDp'] : ['amuDf', 'amuDp'];
+  const result = {};
+  keys.forEach(k => {
+    result[k] = bons.reduce((sum, b) => sum + (parseInt(b[k]) || 0), 0);
+  });
+  return result;
+}
+
+function assUpdateBon(section, lotIdx, bonIdx, field, value) {
+  const lot = assCurrentData[section]?.lots?.[lotIdx];
+  if (!lot || !lot.bons[bonIdx]) return;
 
   if (['inamDf', 'inamDp', 'amuDf', 'amuDp'].includes(field)) {
-    assCurrentData.bons[idx][field] = parseInt(value) || 0;
+    lot.bons[bonIdx][field] = parseInt(value) || 0;
   } else {
-    assCurrentData.bons[idx][field] = value;
+    lot.bons[bonIdx][field] = value;
   }
 
-  assUpdateTotal();
+  assRenderTable(section);
+  assUpdateTotals();
 }
 
-function assDeleteRow(idx) {
-  if (!confirm('Supprimer cette ligne?')) return;
-  assCurrentData.bons.splice(idx, 1);
-  assRenderTable();
-  assUpdateTotal();
+function assDeleteBon(section, lotIdx, bonIdx) {
+  if (!confirm('Supprimer ce bon?')) return;
+  const lot = assCurrentData[section]?.lots?.[lotIdx];
+  if (lot) {
+    lot.bons.splice(bonIdx, 1);
+    if (lot.bons.length === 0) {
+      assCurrentData[section].lots.splice(lotIdx, 1);
+    }
+    assRenderTable(section);
+    assUpdateTotals();
+  }
 }
 
-function assAddRow() {
-  assCurrentData.bons.push({
+function assAddRow(section) {
+  const section_data = assCurrentData[section];
+  let currentLot = section_data.lots && section_data.lots.length > 0 ? section_data.lots[section_data.lots.length - 1] : null;
+
+  if (!currentLot || currentLot.bons.length >= 10) {
+    const newLotNum = (currentLot?.numero || 0) + 1;
+    currentLot = { numero: newLotNum, bons: [] };
+    section_data.lots.push(currentLot);
+  }
+
+  currentLot.bons.push({
     date: new Date().toISOString().split('T')[0],
-    inamDf: 0,
-    inamDp: 0,
-    amuDf: 0,
-    amuDp: 0
+    inamDf: 0, inamDp: 0, amuDf: 0, amuDp: 0
   });
-  assRenderTable();
-  assUpdateTotal();
+
+  assRenderTable(section);
+  assUpdateTotals();
 }
 
-function assUpdateTotal() {
-  const bons = assCurrentData.bons || [];
-  const totals = { inamDf: 0, inamDp: 0, amuDf: 0, amuDp: 0 };
-
-  bons.forEach(bon => {
-    totals.inamDf += bon.inamDf || 0;
-    totals.inamDp += bon.inamDp || 0;
-    totals.amuDf += bon.amuDf || 0;
-    totals.amuDp += bon.amuDp || 0;
+function assUpdateTotals() {
+  ['inam', 'amu'].forEach(section => {
+    const section_data = assCurrentData[section];
+    const lots = section_data?.lots || [];
+    const keys = section === 'inam' ? ['inamDf', 'inamDp'] : ['amuDf', 'amuDp'];
+    const totals = {};
+    keys.forEach(k => {
+      totals[k] = lots.reduce((sum, lot) => sum + (lot.bons || []).reduce((s, b) => s + (parseInt(b[k]) || 0), 0), 0);
+      const el = document.getElementById(`ass-total-${k}`);
+      if (el) el.textContent = fmtA(totals[k]);
+    });
   });
-
-  document.getElementById('ass-total-inamdf').textContent = fmtA(totals.inamDf);
-  document.getElementById('ass-total-inamdp').textContent = fmtA(totals.inamDp);
-  document.getElementById('ass-total-amudf').textContent = fmtA(totals.amuDf);
-  document.getElementById('ass-total-amudp').textContent = fmtA(totals.amuDp);
 }
 
 function assShowStatus() {
+  const inamClosed = assCurrentData.inam?.isClosed;
+  const amuClosed = assCurrentData.amu?.isClosed;
   const statusEl = document.getElementById('ass-status');
-  if (assCurrentData.isClosed) {
+
+  if (inamClosed || amuClosed) {
     statusEl.style.display = 'block';
     statusEl.style.background = '#ffebee';
     statusEl.style.color = '#c62828';
     statusEl.style.border = '1px solid #ef5350';
-    statusEl.innerHTML = '🔒 Cette quinzaine est clôturée et ne peut pas être modifiée';
+    const closed = [inamClosed && 'INAM', amuClosed && 'AMU'].filter(Boolean).join(', ');
+    statusEl.innerHTML = `🔒 ${closed} clôturée(s) - modifications désactivées`;
   } else {
     statusEl.style.display = 'none';
   }
 }
 
-async function assSave() {
+async function assSave(section) {
   try {
-    if (assCurrentData.isClosed) {
-      toast('❌ Cette quinzaine est clôturée', 'error');
+    if (assCurrentData[section]?.isClosed) {
+      toast(`❌ ${section.toUpperCase()} est clôturée`, 'error');
       return;
     }
 
@@ -4175,29 +4227,28 @@ async function assSave() {
     }
 
     const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc((currentUser.pharmacieId || 'DAFEANNE').toUpperCase())
-      .collection('assurances').doc(key);
+    const pharmacieId = (currentUser.pharmacieId || 'DAFEANNE').toUpperCase();
+    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(pharmacieId).collection('assurances').doc(key);
 
-    await docRef.set({
-      bons: assCurrentData.bons,
-      isClosed: false,
-      year,
-      month,
-      period,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    const updateData = {};
+    updateData[section] = assCurrentData[section];
+    updateData.year = year;
+    updateData.month = month;
+    updateData.period = period;
+    updateData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
 
-    toast('✓ Saisies enregistrées', 'success');
+    await docRef.set(updateData, { merge: true });
+    toast(`✓ ${section.toUpperCase()} enregistré`, 'success');
   } catch (e) {
     Logger.error('Erreur assSave', { error: e.message });
     toast('Erreur: ' + e.message, 'error');
   }
 }
 
-async function assClose() {
+async function assClose(section) {
   try {
-    if (assCurrentData.isClosed) {
-      toast('❌ Déjà clôturée', 'error');
+    if (assCurrentData[section]?.isClosed) {
+      toast(`❌ ${section.toUpperCase()} déjà clôturée`, 'error');
       return;
     }
 
@@ -4210,31 +4261,30 @@ async function assClose() {
       return;
     }
 
-    if (!confirm(`Clôturer ${period} ${MOIS_APP[parseInt(month)] || ''} ${year}?\nLes saisies ne seront plus modifiables.`)) {
+    if (!confirm(`Clôturer ${section.toUpperCase()} ${period} ${MOIS_APP[parseInt(month)] || ''} ${year}?\nLes saisies ne seront plus modifiables.`)) {
       return;
     }
 
     const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc((currentUser.pharmacieId || 'DAFEANNE').toUpperCase())
-      .collection('assurances').doc(key);
+    const pharmacieId = (currentUser.pharmacieId || 'DAFEANNE').toUpperCase();
+    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(pharmacieId).collection('assurances').doc(key);
 
-    await docRef.update({
-      isClosed: true,
-      closedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    const updateData = {};
+    updateData[`${section}.isClosed`] = true;
+    updateData[`${section}.closedAt`] = firebase.firestore.FieldValue.serverTimestamp();
 
-    assCurrentData.isClosed = true;
+    await docRef.update(updateData);
+    assCurrentData[section].isClosed = true;
     assShowStatus();
-    toast('✓ Quinzaine clôturée', 'success');
+    toast(`✓ ${section.toUpperCase()} clôturée`, 'success');
   } catch (e) {
     Logger.error('Erreur assClose', { error: e.message });
     toast('Erreur: ' + e.message, 'error');
   }
 }
 
-// Rendu initial (appelé par navigate)
 function renderAssurances() {
-  // Interface vide au démarrage - l'utilisateur clique "Charger"
+  assSwitchTab('inam');
 }
 
 // ══════════════════════════════════════════════════════════════

@@ -297,40 +297,74 @@
           <span id="ass-status-text"></span>
         </div>
 
-        <!-- Tableau éditable -->
-        <div class="card" style="margin-top:16px">
-          <div class="table-wrapper">
-            <table id="ass-table" style="width:100%">
-              <thead>
-                <tr>
-                  <th style="width:120px">Date</th>
-                  <th class="amount" style="width:100px">INAM-DF</th>
-                  <th class="amount" style="width:100px">INAM-DP</th>
-                  <th class="amount" style="width:100px">AMU-DF</th>
-                  <th class="amount" style="width:100px">AMU-DP</th>
-                  <th style="width:40px">Action</th>
-                </tr>
-              </thead>
-              <tbody id="ass-tbody">
-              </tbody>
-            </table>
+        <!-- Onglets INAM / AMU -->
+        <div style="display:flex;gap:8px;margin-top:16px;border-bottom:2px solid var(--border);padding-bottom:0">
+          <button class="btn btn-outline" id="ass-tab-inam" onclick="assSwitchTab('inam')" style="border-bottom:3px solid var(--primary);border-radius:0;font-weight:700">🔸 LOTS INAM</button>
+          <button class="btn btn-outline" id="ass-tab-amu" onclick="assSwitchTab('amu')" style="border-bottom:3px solid transparent;border-radius:0">🔵 LOTS AMU</button>
+        </div>
+
+        <!-- Section INAM -->
+        <div id="ass-inam-container" style="margin-top:16px">
+          <div class="card">
+            <div class="table-wrapper">
+              <table id="ass-table-inam" style="width:100%">
+                <thead>
+                  <tr>
+                    <th style="width:120px">Date</th>
+                    <th class="amount" style="width:100px">INAM-DF</th>
+                    <th class="amount" style="width:100px">INAM-DP</th>
+                    <th style="width:40px">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="ass-tbody-inam"></tbody>
+              </table>
+            </div>
+            <div style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px">
+              <button class="btn btn-outline" onclick="assAddRow('inam')">➕ Ajouter bon INAM</button>
+              <button class="btn btn-success" onclick="assSave('inam')" style="margin-left:auto">💾 Enregistrer INAM</button>
+              <button class="btn btn-warning" onclick="assClose('inam')">✓ Clôturer INAM</button>
+            </div>
           </div>
-          <div style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px">
-            <button class="btn btn-outline" onclick="assAddRow()">➕ Ajouter bon</button>
-            <button class="btn btn-success" onclick="assSave()" style="margin-left:auto">💾 Enregistrer</button>
-            <button class="btn btn-warning" onclick="assClose()">✓ Clôturer</button>
+          <div class="card" style="margin-top:12px;background:var(--primary)15">
+            <div style="padding:16px">
+              <div style="font-weight:600;color:var(--primary);margin-bottom:12px">TOTAUX INAM</div>
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;font-size:14px">
+                <div>INAM-DF: <strong id="ass-total-inamdf">0</strong> F</div>
+                <div>INAM-DP: <strong id="ass-total-inamdp">0</strong> F</div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Totaux -->
-        <div class="card" style="margin-top:16px;background:var(--primary)15">
-          <div style="padding:16px">
-            <div style="font-weight:600;color:var(--primary);margin-bottom:12px">TOTAUX</div>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;font-size:14px">
-              <div>INAM-DF: <strong id="ass-total-inamdf">0</strong> F</div>
-              <div>INAM-DP: <strong id="ass-total-inamdp">0</strong> F</div>
-              <div>AMU-DF: <strong id="ass-total-amudf">0</strong> F</div>
-              <div>AMU-DP: <strong id="ass-total-amudp">0</strong> F</div>
+        <!-- Section AMU -->
+        <div id="ass-amu-container" style="margin-top:16px;display:none">
+          <div class="card">
+            <div class="table-wrapper">
+              <table id="ass-table-amu" style="width:100%">
+                <thead>
+                  <tr>
+                    <th style="width:120px">Date</th>
+                    <th class="amount" style="width:100px">AMU-DF</th>
+                    <th class="amount" style="width:100px">AMU-DP</th>
+                    <th style="width:40px">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="ass-tbody-amu"></tbody>
+              </table>
+            </div>
+            <div style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px">
+              <button class="btn btn-outline" onclick="assAddRow('amu')">➕ Ajouter bon AMU</button>
+              <button class="btn btn-success" onclick="assSave('amu')" style="margin-left:auto">💾 Enregistrer AMU</button>
+              <button class="btn btn-warning" onclick="assClose('amu')">✓ Clôturer AMU</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px;background:var(--primary)15">
+            <div style="padding:16px">
+              <div style="font-weight:600;color:var(--primary);margin-bottom:12px">TOTAUX AMU</div>
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;font-size:14px">
+                <div>AMU-DF: <strong id="ass-total-amudf">0</strong> F</div>
+                <div>AMU-DP: <strong id="ass-total-amudp">0</strong> F</div>
+              </div>
             </div>
           </div>
         </div>

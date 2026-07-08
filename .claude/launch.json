@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "Pharmacie Dev Server",
-      "runtimeExecutable": "powershell",
-      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "server.ps1"],
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["server.py"],
       "port": 3000
     }
   ]

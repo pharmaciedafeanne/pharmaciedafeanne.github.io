@@ -1274,6 +1274,14 @@ function renderDetailEditLotsBuilder() {
       return;
     }
 
+    // IMPORTANT: S'assurer que chaque lot a son entité définie
+    lots.forEach(lot => {
+      if (!lot.entite || typeof lot.entite !== 'string') {
+        lot.entite = entite;
+      }
+    });
+    AppState.set('saisie.lots', lots);
+
     // === ÉTAPE 1: Bandeau modification ===
     const entiteColor = entite === ENTITY.INAM ? 'var(--primary)' : 'var(--success)';
     const entiteIcon = entite === ENTITY.INAM ? '🏥' : '💊';
@@ -1319,13 +1327,14 @@ function renderDetailEditLotsBuilder() {
 
     c.innerHTML = html;
 
-    // Recalculer les sous-totaux
-    lots.forEach(l => {
-      if (l.entite) updateLotSubtotal(l.numero);
-    });
-
-    // Mettre à jour le total global
-    updateGlobalTotal();
+    // Recalculer les sous-totaux avec délai pour s'assurer que le DOM est prêt
+    setTimeout(() => {
+      lots.forEach(l => {
+        updateLotSubtotal(l.numero);
+      });
+      updateGlobalTotal();
+      Logger.debug('renderDetailEditLotsBuilder: sous-totaux recalculés', { nbLots: lots.length });
+    }, 50);
 
     Logger.debug('renderDetailEditLotsBuilder: rendu complété', { nbLots: lots.length, entite, key: editingKey });
 
@@ -1352,6 +1361,14 @@ function renderLotsBuilder() {
 
     const entite = AppState.get('saisie.entite');
     const lots = AppState.get('saisie.lots') || [];
+
+    // IMPORTANT: S'assurer que chaque lot a son entité définie (sinon [object Object])
+    lots.forEach(lot => {
+      if (!lot.entite || typeof lot.entite !== 'string') {
+        lot.entite = entite;
+      }
+    });
+    AppState.set('saisie.lots', lots);
 
     let html = '';
 
@@ -1410,10 +1427,14 @@ function renderLotsBuilder() {
 
     c.innerHTML = html;
 
-    // Recalculer les sous-totaux
-    lots.forEach(lot => {
-      if (lot.entite) updateLotSubtotal(lot.numero);
-    });
+    // Recalculer les sous-totaux avec délai pour s'assurer que le DOM est prêt
+    setTimeout(() => {
+      lots.forEach(lot => {
+        updateLotSubtotal(lot.numero);
+      });
+      updateGlobalTotal();
+      Logger.debug('renderLotsBuilder: sous-totaux recalculés', { nbLots: lots.length });
+    }, 50);
 
     Logger.debug('renderLotsBuilder: rendu complété', { nbLots: lots.length, entite });
 
@@ -1810,19 +1831,28 @@ function updateLotSubtotal(lotNum) {
     const lots = AppState.get('saisie.lots');
     const lot = lots.find(l => l.numero === lotNum);
 
-    if (!lot || !lot.entite || typeof lot.entite !== 'string') {
-      Logger.debug('Lot non trouvé ou sans entité valide pour updateLotSubtotal', { lotNum, lotEntite: lot?.entite, lotEntiteType: typeof lot?.entite });
+    if (!lot) {
+      Logger.debug('Lot non trouvé pour updateLotSubtotal', { lotNum });
       return;
     }
 
-    const e = (typeof lot.entite === 'string' ? lot.entite : 'inam').toLowerCase();
+    // IMPORTANT: S'assurer que lot.entite est une string
+    let entiteStr = lot.entite;
+    if (!entiteStr || typeof entiteStr !== 'string') {
+      entiteStr = AppState.get('saisie.entite') || 'inam';
+      lot.entite = entiteStr;
+    }
+
+    const e = entiteStr.toLowerCase();
     let dfVal = 0, dpVal = 0;
 
     // Calculer les sous-totaux
-    lot.bons.forEach(b => {
-      dfVal += (b.dafeanne && b.dafeanne[e]) || 0;
-      dpVal += (b.depot && b.depot[e]) || 0;
-    });
+    if (lot.bons && Array.isArray(lot.bons)) {
+      lot.bons.forEach(b => {
+        dfVal += (b.dafeanne && b.dafeanne[e]) || 0;
+        dpVal += (b.depot && b.depot[e]) || 0;
+      });
+    }
 
     const total = dfVal + dpVal;
 
@@ -1837,7 +1867,7 @@ function updateLotSubtotal(lotNum) {
     updateElement(`st-${lotNum}-dp`, dpVal);
     updateElement(`st-${lotNum}-total`, total);
 
-    Logger.debug('Sous-totaux lot mis à jour', { lotNum, dafeanne: dfVal, depot: dpVal, total });
+    Logger.debug('Sous-totaux lot mis à jour', { lotNum, entite: e, dafeanne: dfVal, depot: dpVal, total });
 
   } catch (e) {
     Logger.error('Erreur updateLotSubtotal', { lotNum, error: e.message });

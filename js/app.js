@@ -2071,6 +2071,7 @@ async function saveNouvelleNormal(year, month, quinzaine, lots, entite) {
   }
 
   // Sauvegarder avec les paramètres validés
+  console.log('DEBUG avant savePeriod:', { year, month, quinzaine, entite, nbLots: lots.length });
   await savePeriod({
     year,
     month,
@@ -2079,6 +2080,7 @@ async function saveNouvelleNormal(year, month, quinzaine, lots, entite) {
     lots,
     brouillon: false
   });
+  console.log('DEBUG apres savePeriod OK');
   toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} enregistrée ✓`, 'success');
   logAction(`Nouvelle quinzaine ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name || '');
   Logger.info('Quinzaine enregistrée', { entite, quinzaine, year, month });

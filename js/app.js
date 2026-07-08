@@ -1028,7 +1028,12 @@ function addLot() {
   Logger.info('Lot ajouté', { numero, entite });
   addBon(numero); // premier bon automatique
   rerenderLotsBuilder();
+
+  // Forcer la mise à jour des sous-totaux et total global
   setTimeout(() => {
+    updateLotSubtotal(numero);
+    updateGlobalTotal();
+
     const editingKey = AppState.get('saisie.editingKey');
     const builder = document.getElementById(editingKey ? 'lots-container' : 'lots-builder');
     if (builder && builder.lastElementChild) {

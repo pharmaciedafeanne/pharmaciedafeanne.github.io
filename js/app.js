@@ -897,6 +897,9 @@ function renderNouvelle() {
     AppState.set('saisie.lots', []);
     AppState.set('saisie.entite', null);
 
+    // TOUJOURS déverrouiller les champs au démarrage
+    unlockFormFields();
+
     // Récupérer l'état BIS
     const bisMode = AppState.get('bisMode');
 
@@ -915,7 +918,6 @@ function renderNouvelle() {
       AppState.set('saisie.entite', bisMode.entite);
     } else {
       banner.innerHTML = '';
-      unlockFormFields();
     }
 
     renderLotsBuilder();

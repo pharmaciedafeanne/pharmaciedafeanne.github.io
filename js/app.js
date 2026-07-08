@@ -132,6 +132,7 @@ function showMainApp(user) {
     document.getElementById('app').classList.remove('hidden');
     renderSidebar(user);
     navigate('dashboard');
+    setTimeout(() => setupAssurancesBtn(), 100);
     setTimeout(() => logAction('Connexion', user.role, user.name||''), 1000);
     setTimeout(check72hNotifications, 2000);
   }
@@ -149,6 +150,18 @@ function renderSidebar(user) {
   const roleLabel = { superadmin: 'Super Admin', titulaire: 'Pharmacien Titulaire', assistant: 'Assistant', operateur: 'Opérateur' };
   document.getElementById('sb-role').textContent = roleLabel[u.role] || u.role;
   document.getElementById('sb-avatar').textContent = u.name.charAt(0).toUpperCase();
+
+  // Ajouter le bouton Assurances dynamiquement
+  const inamAmuBtn = document.getElementById('nav-inam-amu');
+  if (inamAmuBtn && !document.getElementById('nav-assurances')) {
+    const assurBtn = document.createElement('div');
+    assurBtn.id = 'nav-assurances';
+    assurBtn.className = 'nav-item';
+    assurBtn.setAttribute('data-view', 'assurances');
+    assurBtn.onclick = () => navigate('assurances');
+    assurBtn.innerHTML = '<span class="icon">🏥</span> Assurances INAM AMU';
+    inamAmuBtn.parentNode.insertBefore(assurBtn, inamAmuBtn);
+  }
 
   const isSuperAdmin = u.role === 'superadmin';
   const isTitulaire  = u.role === 'titulaire';
@@ -186,6 +199,19 @@ function renderSidebar(user) {
   // Bouton retour admin (si superadmin navigue dans une pharmacie)
   const navBack = document.getElementById('nav-back-admin');
   if (navBack) navBack.style.display = isSuperAdmin ? 'flex' : 'none';
+}
+
+function setupAssurancesBtn() {
+  const inamAmuBtn = document.getElementById('nav-inam-amu');
+  if (inamAmuBtn && !document.getElementById('nav-assurances')) {
+    const assurBtn = document.createElement('div');
+    assurBtn.id = 'nav-assurances';
+    assurBtn.className = 'nav-item';
+    assurBtn.setAttribute('data-view', 'assurances');
+    assurBtn.onclick = () => navigate('assurances');
+    assurBtn.innerHTML = '<span class="icon">🏥</span> Assurances INAM AMU';
+    inamAmuBtn.parentNode.insertBefore(assurBtn, inamAmuBtn);
+  }
 }
 
 function setActiveNav(view) {

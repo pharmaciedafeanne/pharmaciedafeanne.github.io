@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "Pharmacie Dev Server",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["server.py"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js"],
       "port": 3000
     }
   ]

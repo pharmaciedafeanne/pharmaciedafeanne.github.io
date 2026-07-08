@@ -2286,7 +2286,7 @@ async function doSaveUser() {
       toast('Opérateur modifié ✓','success');
     } else {
       if (!password) { toast('Le mot de passe est obligatoire','error'); btn.disabled=false; btn.textContent='💾 Enregistrer'; return; }
-      const pharmacieId = (currentUser.pharmacieId || _currentPharmacieId || 'PHARMACIE').toUpperCase();
+      const pharmacieId = (currentUser.pharmacieId || (currentUser.pharmacieId || 'DAFEANNE').toUpperCase() || 'PHARMACIE').toUpperCase();
       // Email technique auto-généré, invisible pour l'utilisateur
       const autoEmail = `${pharmacieId.toLowerCase()}_op_${Date.now()}@pharmacie.app`;
       const newUid = await createAccount(name, autoEmail, password, 'operateur', pharmacieId);
@@ -4058,7 +4058,7 @@ async function assLoadData() {
     }
 
     const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc((currentUser.pharmacieId || 'DAFEANNE').toUpperCase())
       .collection('assurances').doc(key);
     const doc = await docRef.get();
 
@@ -4175,7 +4175,7 @@ async function assSave() {
     }
 
     const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc((currentUser.pharmacieId || 'DAFEANNE').toUpperCase())
       .collection('assurances').doc(key);
 
     await docRef.set({
@@ -4215,7 +4215,7 @@ async function assClose() {
     }
 
     const key = `${year}-${String(month).padStart(2,'0')}-${period}`;
-    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc(_currentPharmacieId)
+    const docRef = getDB().collection(COLLECTIONS.PHARMACIES).doc((currentUser.pharmacieId || 'DAFEANNE').toUpperCase())
       .collection('assurances').doc(key);
 
     await docRef.update({

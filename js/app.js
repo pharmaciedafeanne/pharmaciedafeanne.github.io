@@ -1911,14 +1911,40 @@ async function saveNouvelle() {
     }
 
     // 2. Vérifier qu'on a au moins un lot
-    const lots = AppState.get('saisie.lots');
+    let lots = AppState.get('saisie.lots');
     if (!lots || !lots.length) {
       Logger.warn('Tentative save sans lots');
       toast('Ajoutez au moins un lot', 'error');
       return;
     }
 
-    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, nbLots: lots.length });
+    // 3. Vérifier l'entité
+    let entite = AppState.get('saisie.entite');
+    if (!entite || entite === 'null' || entite === '') {
+      Logger.warn('Entité manquante à la sauvegarde', { entite });
+      toast('Sélectionnez une entité (INAM ou AMU) avant d\'enregistrer', 'error');
+      return;
+    }
+
+    // 4. Vérifier que chaque lot a au moins un bon avec des valeurs
+    for (const lot of lots) {
+      if (!lot.bons || lot.bons.length === 0) {
+        Logger.warn('Lot sans bons', { lotNum: lot.numero });
+        toast(`Lot N°${lot.numero} n'a pas de bons`, 'error');
+        return;
+      }
+      const hasValues = lot.bons.some(b =>
+        ((b.dafeanne?.inam || 0) + (b.dafeanne?.amu || 0) +
+         (b.depot?.inam || 0) + (b.depot?.amu || 0)) > 0
+      );
+      if (!hasValues) {
+        Logger.warn('Lot sans valeurs', { lotNum: lot.numero });
+        toast(`Lot N°${lot.numero} n'a pas de valeurs`, 'error');
+        return;
+      }
+    }
+
+    Logger.info('Sauvegarde nouvelle saisie', { year, month, quinzaine, nbLots: lots.length, entite });
 
     const bisMode = AppState.get('bisMode');
 
@@ -1927,7 +1953,7 @@ async function saveNouvelle() {
       await saveNouvelleBis(bisMode, year, month, quinzaine, lots);
     } else {
       // === MODE NORMAL ===
-      await saveNouvelleNormal(year, month, quinzaine, lots);
+      await saveNouvelleNormal(year, month, quinzaine, lots, entite);
     }
 
     // Nettoyage et redirection
@@ -1973,9 +1999,8 @@ async function saveNouvelleBis(bisMode, year, month, quinzaine, lots) {
 }
 
 // Helper: Sauvegarder en mode NORMAL
-async function saveNouvelleNormal(year, month, quinzaine, lots) {
-  const entite = AppState.get('saisie.entite');
-
+async function saveNouvelleNormal(year, month, quinzaine, lots, entite) {
+  // Utiliser l'entité passée en paramètre (validation déjà faite dans saveNouvelle)
   if (!entite) {
     Logger.error('Entité manquante en mode normal');
     throw new Error('Choisissez l\'entité (INAM ou AMU) avant d\'enregistrer.');
@@ -1994,7 +2019,18 @@ async function saveNouvelleNormal(year, month, quinzaine, lots) {
     throw new Error(msg);
   }
 
-  await savePeriod({ year, month, quinzaine, entite, lots, brouillon: false });
+  // Forcer la récupération fraîche de AppState pour la sauvegarde
+  const freshEntite = AppState.get('saisie.entite');
+  const freshLots = AppState.get('saisie.lots');
+
+  await savePeriod({
+    year,
+    month,
+    quinzaine,
+    entite: freshEntite,
+    lots: freshLots,
+    brouillon: false
+  });
   toast(`Quinzaine ${quinzaine} ${MOIS_APP[month]} ${year} — ${entite} enregistrée ✓`, 'success');
   logAction(`Nouvelle quinzaine ${entite}`, `${quinzaine} ${MOIS_APP[month]} ${year}`, currentUser?.name || '');
   Logger.info('Quinzaine enregistrée', { entite, quinzaine, year, month });

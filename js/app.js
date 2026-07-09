@@ -4190,7 +4190,7 @@ function assUpdateTotals() {
     const totals = {};
     keys.forEach(k => {
       totals[k] = lots.reduce((sum, lot) => sum + (lot.bons || []).reduce((s, b) => s + (parseInt(b[k]) || 0), 0), 0);
-      const el = document.getElementById(`ass-total-${k}`);
+      const el = document.getElementById(`ass-total-${k.toLowerCase()}`);
       if (el) el.textContent = fmtA(totals[k]);
     });
   });

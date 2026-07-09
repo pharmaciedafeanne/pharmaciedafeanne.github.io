@@ -4096,18 +4096,19 @@ function assRenderTable(section) {
   tbody.innerHTML = '';
 
   const cols = section === 'inam' ? [{ key: 'inamDf', label: 'INAM-DF' }, { key: 'inamDp', label: 'INAM-DP' }] : [{ key: 'amuDf', label: 'AMU-DF' }, { key: 'amuDp', label: 'AMU-DP' }];
+  let globalRowIdx = 0;
 
   (section_data.lots || []).forEach((lot, lotIdx) => {
     lot.bons = lot.bons || [];
     lot.bons.forEach((bon, bonIdx) => {
       const row = document.createElement('tr');
-      const globalIdx = lotIdx * 100 + bonIdx;
       row.innerHTML = `
-        <td><input type="date" value="${bon.date || ''}" onchange="assUpdateBon('${section}', ${lotIdx}, ${bonIdx}, 'date', this.value)" style="width:100%"></td>
-        ${cols.map(col => `<td class="amount"><input type="number" value="${bon[col.key] || 0}" onchange="assUpdateBon('${section}', ${lotIdx}, ${bonIdx}, '${col.key}', this.value)" style="width:100%"></td>`).join('')}
+        <td><input type="date" value="${bon.date || ''}" data-section="${section}" data-row="${globalRowIdx}" data-col="0" onchange="assUpdateBon('${section}', ${lotIdx}, ${bonIdx}, 'date', this.value)" onkeydown="assHandleKeyNavigation(event)" style="width:100%"></td>
+        ${cols.map((col, colIdx) => `<td class="amount"><input type="number" value="${bon[col.key] || 0}" data-section="${section}" data-row="${globalRowIdx}" data-col="${colIdx + 1}" onchange="assUpdateBon('${section}', ${lotIdx}, ${bonIdx}, '${col.key}', this.value)" onkeydown="assHandleKeyNavigation(event)" style="width:100%"></td>`).join('')}
         <td><button class="btn btn-danger btn-sm" onclick="assDeleteBon('${section}', ${lotIdx}, ${bonIdx})">🗑️</button></td>
       `;
       tbody.appendChild(row);
+      globalRowIdx++;
     });
 
     const sousTotal = assCalculateLotTotal(section, lotIdx);
@@ -4121,6 +4122,35 @@ function assRenderTable(section) {
     `;
     tbody.appendChild(stRow);
   });
+}
+
+function assHandleKeyNavigation(event) {
+  const key = event.key;
+  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) return;
+
+  event.preventDefault();
+
+  const input = event.target;
+  const section = input.dataset.section;
+  const currentRow = parseInt(input.dataset.row);
+  const currentCol = parseInt(input.dataset.col);
+
+  let targetInput = null;
+
+  if (key === 'ArrowRight') {
+    targetInput = document.querySelector(`input[data-section="${section}"][data-row="${currentRow}"][data-col="${currentCol + 1}"]`);
+  } else if (key === 'ArrowLeft') {
+    targetInput = document.querySelector(`input[data-section="${section}"][data-row="${currentRow}"][data-col="${currentCol - 1}"]`);
+  } else if (key === 'ArrowDown') {
+    targetInput = document.querySelector(`input[data-section="${section}"][data-row="${currentRow + 1}"][data-col="${currentCol}"]`);
+  } else if (key === 'ArrowUp') {
+    targetInput = document.querySelector(`input[data-section="${section}"][data-row="${currentRow - 1}"][data-col="${currentCol}"]`);
+  }
+
+  if (targetInput) {
+    targetInput.focus();
+    targetInput.select();
+  }
 }
 
 function assCalculateLotTotal(section, lotIdx) {

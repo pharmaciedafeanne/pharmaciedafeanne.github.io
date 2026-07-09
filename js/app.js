@@ -4184,14 +4184,22 @@ function assAddRow(section) {
 
 function assUpdateTotals() {
   ['inam', 'amu'].forEach(section => {
-    const section_data = assCurrentData[section];
-    const lots = section_data?.lots || [];
+    const lots = assCurrentData[section]?.lots || [];
     const keys = section === 'inam' ? ['inamDf', 'inamDp'] : ['amuDf', 'amuDp'];
-    const totals = {};
+
     keys.forEach(k => {
-      totals[k] = lots.reduce((sum, lot) => sum + (lot.bons || []).reduce((s, b) => s + (parseInt(b[k]) || 0), 0), 0);
+      let total = 0;
+      lots.forEach(lot => {
+        (lot.bons || []).forEach(bon => {
+          const val = parseInt(bon[k]) || 0;
+          total += val;
+        });
+      });
+
       const el = document.getElementById(`ass-total-${k.toLowerCase()}`);
-      if (el) el.textContent = fmtA(totals[k]);
+      if (el) {
+        el.textContent = fmtA(total);
+      }
     });
   });
 }

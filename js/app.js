@@ -4102,9 +4102,11 @@ function assRenderTable(section) {
     lot.bons = lot.bons || [];
     lot.bons.forEach((bon, bonIdx) => {
       const row = document.createElement('tr');
+      const bonTotal = (parseInt(bon[cols[0].key]) || 0) + (parseInt(bon[cols[1].key]) || 0);
       row.innerHTML = `
         <td><input type="date" value="${bon.date || ''}" data-section="${section}" data-row="${globalRowIdx}" data-col="0" onchange="assUpdateBon('${section}', ${lotIdx}, ${bonIdx}, 'date', this.value)" onkeydown="assHandleKeyNavigation(event)" style="width:100%"></td>
         ${cols.map((col, colIdx) => `<td class="amount"><input type="number" value="${bon[col.key] || 0}" data-section="${section}" data-row="${globalRowIdx}" data-col="${colIdx + 1}" onchange="assUpdateBon('${section}', ${lotIdx}, ${bonIdx}, '${col.key}', this.value)" onkeydown="assHandleKeyNavigation(event)" style="width:100%"></td>`).join('')}
+        <td class="amount" style="background:var(--primary)15;font-weight:bold">${fmtA(bonTotal)} F</td>
         <td><button class="btn btn-danger btn-sm" onclick="assDeleteBon('${section}', ${lotIdx}, ${bonIdx})">🗑️</button></td>
       `;
       tbody.appendChild(row);
@@ -4112,12 +4114,14 @@ function assRenderTable(section) {
     });
 
     const sousTotal = assCalculateLotTotal(section, lotIdx);
+    const lotTotalGeneral = (sousTotal[cols[0].key] || 0) + (sousTotal[cols[1].key] || 0);
     const stRow = document.createElement('tr');
     stRow.style.background = 'var(--border)';
     stRow.style.fontWeight = 'bold';
     stRow.innerHTML = `
       <td style="padding:8px"><strong>LOT ${lot.numero} Sous-total</strong></td>
       ${cols.map(col => `<td class="amount"><strong>${fmtA(sousTotal[col.key] || 0)}</strong> F</td>`).join('')}
+      <td class="amount" style="background:var(--primary)35;font-weight:bold">${fmtA(lotTotalGeneral)} F</td>
       <td></td>
     `;
     tbody.appendChild(stRow);
@@ -4216,6 +4220,7 @@ function assUpdateTotals() {
   ['inam', 'amu'].forEach(section => {
     const lots = assCurrentData[section]?.lots || [];
     const keys = section === 'inam' ? ['inamDf', 'inamDp'] : ['amuDf', 'amuDp'];
+    const totals = {};
 
     keys.forEach(k => {
       let total = 0;
@@ -4226,11 +4231,18 @@ function assUpdateTotals() {
         });
       });
 
+      totals[k] = total;
       const el = document.getElementById(`ass-total-${k.toLowerCase()}`);
       if (el) {
         el.textContent = fmtA(total);
       }
     });
+
+    const totalGeneral = (totals[keys[0]] || 0) + (totals[keys[1]] || 0);
+    const elGeneral = document.getElementById(`ass-total-${section}-general`);
+    if (elGeneral) {
+      elGeneral.textContent = fmtA(totalGeneral);
+    }
   });
 }
 

@@ -4153,7 +4153,8 @@ function assHandleKeyNavigation(event) {
 
   if (targetInput) {
     targetInput.focus();
-    targetInput.select();
+    const val = targetInput.value || '';
+    targetInput.setSelectionRange(val.length, val.length);
   }
 }
 
